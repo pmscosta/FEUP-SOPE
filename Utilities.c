@@ -46,13 +46,13 @@ void child_sigint_handler(int signo) {
 
 void findPatternInput(char *pattern) {
 
-    char * buffer;
+    char *buffer;
 
     char *pattern_location = NULL;
 
     size_t n;
 
-    while (1){
+    while (1) {
 
         getline(&buffer, &n, stdin);
 
@@ -60,7 +60,7 @@ void findPatternInput(char *pattern) {
         buffer[strcspn(buffer, "\n")] = 0;
 
 
-        if(strcmp(buffer, "q") == 0){
+        if (strcmp(buffer, "q") == 0) {
             break;
         }
 
@@ -118,6 +118,20 @@ void analyse_directory(char *directory, char *pattern) {
     struct stat stat_buf;
     char *name;
 
+    int status;
+
+    stat(directory, &stat_buf);
+
+    /*
+     * Need to test if it is a simple file,
+     * if so, only do the normal search and exit
+     */
+    if (S_ISREG(stat_buf.st_mode)) {
+        findPatternFile(directory, pattern);
+        return;
+    }
+
+
     if ((dirp = opendir(directory)) == NULL) {
         perror(directory);
         exit(1);
@@ -133,15 +147,7 @@ void analyse_directory(char *directory, char *pattern) {
         }
 
         if (S_ISREG(stat_buf.st_mode)) {
-
-            pid_t pid = fork();
-            if (pid == 0) {
-                findPatternFile(name, pattern);
-                exit(0);
-            } else {
-                waitpid(pid, NULL, WNOHANG);
-            }
-
+            findPatternFile(name, pattern);
         }
             /*
              * Need to prevent it from opening the current and previous directory again
@@ -153,13 +159,13 @@ void analyse_directory(char *directory, char *pattern) {
             pid_t pid = fork();
             if (pid == 0) {
                 analyse_directory(name, pattern);
-                exit(0);
-            } else {
-                waitpid(pid, NULL, WNOHANG);
+                return;
             }
         }
 
     }
+
+    wait(&status);
 
     free(name);
 
@@ -168,6 +174,17 @@ void analyse_directory(char *directory, char *pattern) {
 
 
 int main(int argc, char *const argv[]) {
+
+    struct sigaction action;
+    action.sa_handler = parent_sigint_handler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+
+    if (sigaction(SIGINT, &action, NULL) < 0) {
+        fprintf(stderr, "Unable to install SIGINT handler\n");
+        exit(1);
+    }
+
 
     if (argc < 2) {
         printf("Usage: %s <pattern> <file>\n", argv[0]);
@@ -182,16 +199,6 @@ int main(int argc, char *const argv[]) {
     }
 
     char *directory = argv[2];
-
-    struct sigaction action;
-    action.sa_handler = parent_sigint_handler;
-    sigemptyset(&action.sa_mask);
-    action.sa_flags = 0;
-
-    if (sigaction(SIGINT, &action, NULL) < 0) {
-        fprintf(stderr, "Unable to install SIGINT handler\n");
-        exit(1);
-    }
 
     analyse_directory(directory, pattern);
 
