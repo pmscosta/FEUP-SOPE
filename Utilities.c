@@ -25,6 +25,8 @@
 #define ANSI_COLOR_MAGENTA "\x1b[35m"
 #define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
+#define CLOSE 0
+#define OPEN 1
 
 void parent_sigint_handler(int signo) {
 
@@ -36,6 +38,15 @@ void parent_sigint_handler(int signo) {
         exit(0);
 
     return;
+
+}
+
+char * createFileMessage(double time, int pid, char * filename){
+
+    char * message;
+    asprintf(&message, "%f - %d %s\n", time, pid, filename);
+
+    return message;
 
 }
 
@@ -153,6 +164,7 @@ void findPatternFile(char *filename, char *pattern) {
     }
 
     free(buffer);
+    fclose(file);
 
 }
 
@@ -224,7 +236,20 @@ void findWordFile(char *filename, char *pattern) {
 
 }
 
-void analyse_directory(char *directory, char *pattern) {
+void updateLogFile(const char * env, char * message){
+    char * file = getenv(env);
+    FILE * fp = fopen(file,"a+");
+
+    if ( fwrite(message, strlen(message), 1, fp) == 0){
+        fprintf(stderr, "An error occurred while saving to the file\n");
+        exit(1);
+    }
+
+    fclose(fp);
+}
+
+
+void analyse_directory(char *directory, char *pattern, const char * env) {
 
     DIR *dirp;
     struct dirent *direntp;
@@ -260,6 +285,7 @@ void analyse_directory(char *directory, char *pattern) {
         }
 
         if (S_ISREG(stat_buf.st_mode)) {
+            updateLogFile(env, createFileMessage(0.15, getpid(), name));
             findPatternFile(name, pattern);
         }
             /*
@@ -271,7 +297,7 @@ void analyse_directory(char *directory, char *pattern) {
 
             pid_t pid = fork();
             if (pid == 0) {
-                analyse_directory(name, pattern);
+                analyse_directory(name, pattern, env);
                 return;
             }
             else {
@@ -281,13 +307,50 @@ void analyse_directory(char *directory, char *pattern) {
 
     }
 
-    free(name);
+    //free(name);
+
+
+}
+
+void setLogFile(const char * env){
+    printf(">>What will be name of the logfile?\n");
+    char * name;
+    size_t size;
+
+
+    int n = getline(&name, &size, stdin);
+
+    //removing the trailing newline
+    name[strcspn(name, "\n")] = 0;
+
+    if (n == -1){
+        fprintf(stderr, "An error occurred while reading the filename\n");
+        exit(1);
+    }
+    else if(n == 0){
+        fprintf(stderr, "An empty file name is not valid\n");
+        setLogFile(env);
+    }
+
+    if (setenv(env, name, 1) != 0){
+        fprintf(stderr, "An error occurred while adding the variable\n");
+        exit(1);
+    }
+
+    printf(">>The variable %s with value %s was added with success\n", env, name);
 
 
 }
 
 
-int main(int argc, char *const argv[]) {
+int main(int argc, char *const argv[], char * envp[]) {
+
+    /*
+     * Setting up the env variable
+     */
+    const char * env = "LOGFILENAME";
+
+    setLogFile(env);
 
     struct sigaction action;
     action.sa_handler = parent_sigint_handler;
@@ -314,7 +377,7 @@ int main(int argc, char *const argv[]) {
 
     char *directory = argv[2];
 
-    analyse_directory(directory, pattern);
+    analyse_directory(directory, pattern, env);
 
     return 0;
 }
