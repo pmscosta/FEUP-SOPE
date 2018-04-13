@@ -21,6 +21,7 @@
 
 #define MAX_BUFFER_LENGHT 1024
 #define ANSI_COLOR_RED     "\x1b[31m"
+#define ANSI_COLOR_RESET   "\x1b[0m"
 #define CLOSE 0
 #define OPEN 1
 
@@ -41,7 +42,7 @@ struct timeval t_init;
 struct timeval t_end;
 
 
-double getTime(){
+double getTime() {
     gettimeofday(&t_end, NULL);
     double time = (double) (t_end.tv_usec - t_init.tv_usec) / 1000000 + (double) (t_end.tv_sec - t_init.tv_sec);
     time *= 1000;
@@ -51,20 +52,18 @@ double getTime(){
 void parent_sigint_handler(int signo) {
     int repeat = 1;
 
-    while(repeat){
+    while (repeat) {
         repeat = 0;
         fprintf(stderr, "\nAre you sure you want to quit? (Y/N): ");
         char option;
         scanf("%c", &option);
 
-        if (option == 'Y' || option == 'y'){
+        if (option == 'Y' || option == 'y') {
             kill(-getpgrp(), SIGUSR1);
             exit(0);
-        }
-        else if(option == 'N' || option == 'n'){
+        } else if (option == 'N' || option == 'n') {
             kill(-getpgrp(), SIGUSR2);
-        }
-        else{
+        } else {
             repeat = 1;
         }
     }
@@ -72,17 +71,17 @@ void parent_sigint_handler(int signo) {
 
 
 void child_sigint_handler(int signo) {
-    switch(signo){
-    case SIGINT:
-        pause();
-        break;
-    case SIGUSR1:
-        exit(0);
-        break;
-    case SIGUSR2:
-        break;
+    switch (signo) {
+        case SIGINT:
+            pause();
+            break;
+        case SIGUSR1:
+            exit(0);
+            break;
+        case SIGUSR2:
+            break;
     }
-    
+
 }
 
 void parent_sigchld_handler(int signo) {
@@ -90,7 +89,9 @@ void parent_sigchld_handler(int signo) {
 }
 
 
-char *createFileMessage(double time, int pid, char *filename) {
+void updateLogFile(const char *env, char *message) {
+    char *file = getenv(env);
+    FILE *fp = fopen(file, "a+");
 
     if (fwrite(message, strlen(message), 1, fp) == 0) {
         fprintf(stderr, "An error occurred while saving to the file\n");
@@ -99,6 +100,7 @@ char *createFileMessage(double time, int pid, char *filename) {
 
     fclose(fp);
 }
+
 
 char *createFileMessage(double time, int pid, char *filename, int mode) {
 
@@ -124,9 +126,7 @@ char *createFileMessage(double time, int pid, char *filename, int mode) {
 }
 
 
-
-
-bool completeWord(char* buffer, char* pattern,char *word_location){
+bool completeWord(char *buffer, char *pattern, char *word_location) {
 
 
     if (word_location > buffer) {
@@ -246,9 +246,6 @@ void findPatternFile(char *filename, char *pattern, options *op, const char *env
 }
 
 
-
-
-
 void analyse_directory(char *directory, char *pattern, options *op, const char *env) {
 
     DIR *dirp;
@@ -307,7 +304,7 @@ void analyse_directory(char *directory, char *pattern, options *op, const char *
                 sigemptyset(&action.sa_mask);
                 action.sa_flags = 0;
 
-                 if (sigaction(SIGINT, &action, NULL) < 0) {
+                if (sigaction(SIGINT, &action, NULL) < 0) {
                     fprintf(stderr, "Unable to install SIGINT handler\n");
                     exit(1);
                 }
@@ -323,7 +320,7 @@ void analyse_directory(char *directory, char *pattern, options *op, const char *
                 }
 
                 sigprocmask(SIG_UNBLOCK, &signal_set, NULL);
-                analyse_directory(name, pattern,op,env);
+                analyse_directory(name, pattern, op, env);
                 return;
             } else {
                 sigprocmask(SIG_UNBLOCK, &signal_set, NULL);
@@ -365,13 +362,13 @@ void setLogFile(const char *env) {
     printf(">>The variable %s with value %s was added with success\n", env, name);
 }
 
-void reset(options * op){
-  op->ignoreCase=false;
-  op->showOnlyFileName=false;
-  op->showLineNumber=false;
-  op->showNumberOfLines=false;
-  op->completeWord= false;
-  op->recursive=false;
+void reset(options *op) {
+    op->ignoreCase = false;
+    op->showOnlyFileName = false;
+    op->showLineNumber = false;
+    op->showNumberOfLines = false;
+    op->completeWord = false;
+    op->recursive = false;
 }
 
 
@@ -405,17 +402,17 @@ void analyseAction(int argc, char *const argv[], const char *env) {
 
     char *directory;
 
-    if(i==argc-2){
-      directory = argv[argc-1];
-      pattern = argv[i];
-      analyse_directory(directory, pattern, op, env);
-    }else if (i==argc -1){
-      pattern = argv[i];
-      if(op->showLineNumber || op->showOnlyFileName|| op->recursive ||op->showNumberOfLines)
-        printf("Invalid flags for a STDIN read\n");
-      else 
-        findPatternInput(pattern, op);
-    }else printf("Unable to recognize flags\n");
+    if (i == argc - 2) {
+        directory = argv[argc - 1];
+        pattern = argv[i];
+        analyse_directory(directory, pattern, op, env);
+    } else if (i == argc - 1) {
+        pattern = argv[i];
+        if (op->showLineNumber || op->showOnlyFileName || op->recursive || op->showNumberOfLines)
+            printf("Invalid flags for a STDIN read\n");
+        else
+            findPatternInput(pattern, op);
+    } else printf("Unable to recognize flags\n");
 
 }
 
@@ -426,10 +423,6 @@ int main(int argc, char *const argv[]) {
         exit(1);
     }
 
-    /*
-     * Setting up the env variable
-     */
-    const char *env = "LOGFILENAME";
 
     gettimeofday(&t_init, NULL);
 
@@ -460,13 +453,14 @@ int main(int argc, char *const argv[]) {
     }
 
     /*
-    * Setting up the env variable
-    */
+     * Setting up the env variable
+     */
     const char *env = "LOGFILENAME";
 
-    fprintf(stderr, "Analyse\n");
-    analyseAction(argc,argv,env);
+    setLogFile(env);
 
+    fprintf(stderr, "Analyse\n");
+    analyseAction(argc, argv, env);
 
 
     return 0;
