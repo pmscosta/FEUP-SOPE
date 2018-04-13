@@ -40,17 +40,46 @@ typedef struct{
 
 
 void parent_sigint_handler(int signo) {
+    int repeat = 1;
 
-    fprintf(stderr, "\nAre you sure you want to quit? (Y/N)");
-    char option;
-    scanf("%c", &option);
+    while(repeat){
+        repeat = 0;
+        fprintf(stderr, "\nAre you sure you want to quit? (Y/N): ");
+        char option;
+        scanf("%c", &option);
 
-    if (option == 'Y' || option == 'y')
-        exit(0);
-
-    return;
-
+        if (option == 'Y' || option == 'y'){
+            kill(-getpgrp(), SIGUSR1);
+            exit(0);
+        }
+        else if(option == 'N' || option == 'n'){
+            kill(-getpgrp(), SIGUSR2);
+        }
+        else{
+            repeat = 1;
+        }
+    }
 }
+
+
+void child_sigint_handler(int signo) {
+    switch(signo){
+    case SIGINT:
+        pause();
+        break;
+    case SIGUSR1:
+        exit(0);
+        break;
+    case SIGUSR2:
+        break;
+    }
+    
+}
+
+void parent_sigchld_handler(int signo) {
+    while (waitpid(-1, NULL, WNOHANG) > 0);
+}
+
 
 char *createFileMessage(double time, int pid, char *filename) {
 
@@ -67,11 +96,7 @@ char *createFileMessage(double time, int pid, char *filename) {
 
 }
 
-void child_sigint_handler(int signo) {
 
-    fprintf(stderr, "\nChild");
-
-}
 
 
 bool completeWord(char* buffer, char* pattern,char *word_location){
@@ -248,22 +273,49 @@ void analyse_directory(char *directory, char *pattern,options* op, const char *e
         else if (S_ISDIR(stat_buf.st_mode) && (strcmp(direntp->d_name, ".") != 0) &&
                  ((strcmp(direntp->d_name, "..") != 0))) {
 
+            sigset_t signal_set;
+            sigemptyset(&signal_set);
+            sigaddset(&signal_set, SIGUSR1);
+            sigaddset(&signal_set, SIGUSR2);
+            sigaddset(&signal_set, SIGINT);
+            sigprocmask(SIG_BLOCK, &signal_set, NULL);
 
             pid_t pid = fork();
             if (pid == 0) {
+                struct sigaction action;
+                action.sa_handler = child_sigint_handler;
+                sigemptyset(&action.sa_mask);
+                action.sa_flags = 0;
+
+                 if (sigaction(SIGINT, &action, NULL) < 0) {
+                    fprintf(stderr, "Unable to install SIGINT handler\n");
+                    exit(1);
+                }
+
+                if (sigaction(SIGUSR1, &action, NULL) < 0) {
+                    fprintf(stderr, "Unable to install SIGUSR1 handler\n");
+                    exit(1);
+                }
+
+                if (sigaction(SIGUSR2, &action, NULL) < 0) {
+                    fprintf(stderr, "Unable to install SIGUSR2 handler\n");
+                    exit(1);
+                }
+
+                sigprocmask(SIG_UNBLOCK, &signal_set, NULL);
                 analyse_directory(name, pattern,op,env);
                 return;
             } else {
-                waitpid(pid, NULL, 0);
+                sigprocmask(SIG_UNBLOCK, &signal_set, NULL);
+                //waitpid(pid, NULL, 0);
             }
 
         }
 
     }
 
+    while (wait(NULL) > 0);
     free(name);
-
-
 }
 
 void setLogFile(const char *env) {
@@ -291,9 +343,8 @@ void setLogFile(const char *env) {
     }
 
     printf(">>The variable %s with value %s was added with success\n", env, name);
-
-
 }
+
 void reset(options * op){
   op->ignoreCase=false;
   op->showOnlyFileName=false;
@@ -340,13 +391,21 @@ void analyseAction(int argc, char *const argv[], const char* env){
       analyse_directory(directory, pattern, op, env);
     }else if (i==argc -1){
       pattern = argv[i];
-      if(op->showLineNumber || op->showOnlyFileName|| op->recursive ||op->showNumberOfLines){printf("Invalid flags for a STDIN read\n");
-      else findPatternInput(pattern, op);
+      if(op->showLineNumber || op->showOnlyFileName|| op->recursive ||op->showNumberOfLines)
+        printf("Invalid flags for a STDIN read\n");
+      else 
+        findPatternInput(pattern, op);
     }else printf("Unable to recognize flags\n");
 
 }
 
 int main(int argc, char *const argv[]) {
+
+    if (argc < 2) {
+        printf("Usage: %s <pattern> <file>\n", argv[0]);
+        exit(1);
+    }
+
     /*
      * Setting up the env variable
      */
@@ -355,21 +414,34 @@ int main(int argc, char *const argv[]) {
     setLogFile(env);
 
     struct sigaction action;
-    action.sa_handler = parent_sigint_handler;
     sigemptyset(&action.sa_mask);
     action.sa_flags = 0;
 
+    action.sa_handler = parent_sigint_handler;
     if (sigaction(SIGINT, &action, NULL) < 0) {
         fprintf(stderr, "Unable to install SIGINT handler\n");
         exit(1);
     }
 
-    if (argc < 2) {
-        printf("Usage: %s <pattern> <file>\n", argv[0]);
+    action.sa_handler = SIG_IGN;
+    if (sigaction(SIGUSR1, &action, NULL) < 0) {
+        fprintf(stderr, "Unable to install SIGUSR1 handler\n");
+        exit(1);
+    }
+    if (sigaction(SIGUSR2, &action, NULL) < 0) {
+        fprintf(stderr, "Unable to install SIGUSR2 handler\n");
         exit(1);
     }
 
-    analyseAction(argc,argv,env)
+    action.sa_handler = parent_sigchld_handler;
+    if (sigaction(SIGCHLD, &action, NULL) < 0) {
+        fprintf(stderr, "Unable to install SIGCHLD handler\n");
+        exit(1);
+    }
+
+
+    fprintf(stderr, "Analyse\n");
+    analyseAction(argc,argv,env);
 
 
 
