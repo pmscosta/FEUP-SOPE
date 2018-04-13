@@ -274,11 +274,12 @@ void analyse_directory(char *directory, char *pattern) {
                 analyse_directory(name, pattern);
                 return;
             }
+            else {
+                waitpid(pid, NULL, 0);
+            }
         }
 
     }
-
-    wait(&status);
 
     free(name);
 
