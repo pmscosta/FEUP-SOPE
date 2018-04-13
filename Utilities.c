@@ -16,6 +16,7 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <ctype.h>
+#include <stdbool.h>
 
 #define MAX_BUFFER_LENGHT 1024
 #define ANSI_COLOR_RED     "\x1b[31m"
@@ -27,6 +28,16 @@
 #define ANSI_COLOR_RESET   "\x1b[0m"
 #define CLOSE 0
 #define OPEN 1
+
+typedef struct{
+  bool ignoreCase;
+  bool showOnlyFileName;
+  bool showLineNumber;
+  bool showNumberOfLines;
+  bool completeWord;
+  bool recursive;
+}options;
+
 
 void parent_sigint_handler(int signo) {
 
@@ -62,7 +73,7 @@ void child_sigint_handler(int signo) {
 
 }
 
-void findPatternInput(char *pattern) {
+void findPatternInput(char *pattern, options* op) {
 
     char *buffer;
 
@@ -93,45 +104,34 @@ void findPatternInput(char *pattern) {
     free(buffer);
 
 }
+bool completeWord(char* buffer, char* pattern,char *word_location){
 
-/*
- * search for the pattern, ignoring the case of both
- * to be used with -i flag
- *
- */
 
-void findPatternFileInsensitive(char *filename, char *pattern) {
-    FILE *file = fopen(filename, "r");
+    if (word_location > buffer) {
 
-    if (file == NULL) {
-        fprintf(stderr, "could not open: %s\n", filename);
-        exit(2);
-    }
+        if(isalnum(*(word_location-1)))
+            return false;
 
-    char *buffer = NULL;
+        /*
+         * checking if the word is in the middle of the sentence
+         * so that we don't access invalid memory
+         */
+        if(((word_location + strlen(pattern)) < ( buffer + strlen(buffer)))) {
 
-    size_t size = 0;
-
-    char *word_location;
-
-    size_t n = 0;
-
-    int nLines = 0;
-
-    while ((n = getline(&buffer, &size, file)) != -1) {
-
-        ++nLines;
-
-        if ((word_location = strcasestr(buffer, pattern)) != NULL) {
-
-            printf("line %d:%s", nLines, buffer);
+            if (!isalnum(*(word_location + strlen(pattern)))) {
+              return true;
+            }
 
         }
+        else{
+              return true;
+        }
 
+    }else if(!isalnum(*(word_location + strlen(pattern)))){
+      return true;
     }
 
-    free(buffer);
-    fclose(file);
+  return false;
 }
 
 /*
@@ -139,109 +139,51 @@ void findPatternFileInsensitive(char *filename, char *pattern) {
  *
  */
 
-void findPatternFile(char *filename, char *pattern) {
+void findPatternFile(char *filename, char *pattern, options * op) {
 
-    FILE *file = fopen(filename, "r");
+   FILE *file = fopen(filename, "r");
 
-    if (file == NULL) {
-        fprintf(stderr, "could not open: %s\n", filename);
-        exit(2);
-    }
+   if (file == NULL) {
+       fprintf(stderr, "could not open: %s\n", filename);
+       exit(2);
+   }
 
-    char *buffer = NULL;
+   char *buffer = NULL;
 
-    size_t size = 0;
+   size_t size = 0;
 
-    char *word_location;
+   char *word_location;
 
-    size_t n = 0;
+   size_t n = 0;
 
-    int nLines = 0;
+   int nLines = 0;
 
-    while ((n = getline(&buffer, &size, file)) != -1) {
-
-        ++nLines;
-
-        if ((word_location = strstr(buffer, pattern)) != NULL) {
-
-            printf("line %d:%s", nLines, buffer);
-
-        }
-
-    }
-
-    free(buffer);
-    fclose(file);
-
-}
-
-/*
- * search for the full pattern in the file
- *
- */
-void findWordFile(char *filename, char *pattern) {
-
-    printf("file : %s", filename);
-
-    FILE *file = fopen(filename, "r");
-
-    if (file == NULL) {
-        fprintf(stderr, "could not open: %s\n", filename);
-        exit(2);
-    }
-
-    char *buffer = NULL;
-
-    size_t size = 0;
-
-    char *word_location;
-
-    size_t n = 0;
-
-    int nLines = 0;
-
-    while ((n = getline(&buffer, &size, file)) != -1) {
-
-        ++nLines;
-
-        if ((word_location = strstr(buffer, pattern)) != NULL) {
-
-            /*
-             * checking if word is not in the beginning of the sentence
-             */
-            if (word_location > buffer) {
-
-                if (isalnum(*(word_location - 1)))
-                    continue;
-
-                /*
-                 * checking if the word is in the middle of the sentence
-                 * so that we don't access invalid memory
-                 */
-                if (((word_location + strlen(pattern)) < (buffer + strlen(buffer)))) {
-
-                    if (!isalnum(*(word_location + strlen(pattern)))) {
-                        printf("here\n");
-                        printf("line %d:%s", nLines, buffer);
-                    }
-
-                } else {
-                    printf("line %d:%s", nLines, buffer);
-                }
-
-            } else if (!isalnum(*(word_location + strlen(pattern)))) {
-                printf("line %d:%s", nLines, buffer);
-            }
+   int lineCounter=0;
 
 
-        }
+   if(op->showOnlyFileName) printf("%s\n", filename);
 
-    }
+   while ((n = getline(&buffer, &size, file)) != -1) {
+       ++nLines;
 
-    free(buffer);
+         if (((word_location = strstr(buffer, pattern))!=NULL && !op->ignoreCase) || (op->ignoreCase && (word_location = strcasestr(buffer, pattern)) != NULL)) {
 
+           if(!op->completeWord || completeWord(buffer,pattern, word_location) ){
+             if(op->showNumberOfLines) lineCounter++;
+             else {
+               if(op->showLineNumber) printf("%d:", nLines);
+               printf("%s",buffer );
+             }
+           }
+         }
+   }
+   if(op->showNumberOfLines) printf("%d\n",lineCounter);
+
+   free(buffer);
+   fclose(file);
 
 }
+
 
 void updateLogFile(const char *env, char *message) {
     char *file = getenv(env);
@@ -256,14 +198,14 @@ void updateLogFile(const char *env, char *message) {
 }
 
 
-void analyse_directory(char *directory, char *pattern, const char *env) {
+void analyse_directory(char *directory, char *pattern,options* op, const char *env) {
 
     DIR *dirp;
     struct dirent *direntp;
     struct stat stat_buf;
     char *name;
 
-    int status;
+
 
     stat(directory, &stat_buf);
 
@@ -272,7 +214,7 @@ void analyse_directory(char *directory, char *pattern, const char *env) {
      * if so, only do the normal search and exit
      */
     if (S_ISREG(stat_buf.st_mode)) {
-        findPatternFile(directory, pattern);
+        findPatternFile(directory, pattern,op);
         return;
     }
 
@@ -293,7 +235,7 @@ void analyse_directory(char *directory, char *pattern, const char *env) {
 
         if (S_ISREG(stat_buf.st_mode)) {
             updateLogFile(env, createFileMessage(0.15, getpid(), name));
-            findPatternFile(name, pattern);
+            findPatternFile(name, pattern,op);
         }
             /*
              * Need to prevent it from opening the current and previous directory again
@@ -304,7 +246,7 @@ void analyse_directory(char *directory, char *pattern, const char *env) {
 
             pid_t pid = fork();
             if (pid == 0) {
-                analyse_directory(name, pattern, env);
+                analyse_directory(name, pattern,op,env);
                 return;
             } else {
                 waitpid(pid, NULL, 0);
@@ -347,17 +289,65 @@ void setLogFile(const char *env) {
 
 
 }
+void reset(options * op){
+  op->ignoreCase=false;
+  op->showOnlyFileName=false;
+  op->showLineNumber=false;
+  op->showNumberOfLines=false;
+  op->completeWord= false;
+  op->recursive=false;
+}
 
 
-int main(int argc, char *const argv[], char *envp[]) {
+int analyseAction(int argc, char *const argv[], const char* env){
 
+
+    char *pattern;
+
+    options* op = (options *) malloc(sizeof(options)) ;
+    reset(op);
+
+    if (argc == 2) {
+        pattern = argv[1];
+        findPatternInput(pattern, op);
+        exit(0);
+    }
+
+    int i;
+
+    for( i = 1; i < argc;i++){
+      if(argv[i][0]== '-') {
+        if(strcmp(argv[i],"-i") == 0){ op->ignoreCase=true;}
+        else if(strcmp(argv[i],"-l")==0)op->showOnlyFileName=true ;
+        else if(strcmp(argv[i],"-n")==0)op->showLineNumber=true ;
+        else if(strcmp(argv[i],"-c")==0)op->showNumberOfLines=true ;
+        else if(strcmp(argv[i],"-w")==0) op->completeWord=true;
+        else if(strcmp(argv[i],"-r")==0) op->recursive=true;
+      }else break;
+    }
+
+
+    char *directory;
+
+    if(i==argc-2){
+      directory = argv[argc-1];
+      pattern = argv[i];
+      analyse_directory(directory, pattern, op, env);
+    }else if (i==argc -1){
+      pattern = argv[i];
+      findPatternInput(pattern, op);
+    }else return -1;
+
+    return 0;
+}
+
+int main(int argc, char *const argv[]) {
     /*
      * Setting up the env variable
      */
     const char *env = "LOGFILENAME";
 
     setLogFile(env);
-
 
     struct sigaction action;
     action.sa_handler = parent_sigint_handler;
@@ -369,26 +359,15 @@ int main(int argc, char *const argv[], char *envp[]) {
         exit(1);
     }
 
-
     if (argc < 2) {
         printf("Usage: %s <pattern> <file>\n", argv[0]);
         exit(1);
     }
 
-
-    char *pattern = argv[1];
-
-
-    if (argc == 2) {
-        findPatternInput(pattern);
-        exit(0);
+    if(analyseAction(argc,argv,env)== -1){
+        printf("Unable to recognize flags\n");
     }
 
-
-    char *directory = argv[2];
-
-
-    analyse_directory(directory, pattern, env);
 
 
     return 0;
