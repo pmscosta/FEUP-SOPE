@@ -41,10 +41,16 @@ void parent_sigint_handler(int signo) {
 
 }
 
-char * createFileMessage(double time, int pid, char * filename){
+char *createFileMessage(double time, int pid, char *filename) {
 
-    char * message;
-    asprintf(&message, "%f - %d %s\n", time, pid, filename);
+    char *message = NULL;
+
+
+    if (asprintf(&message, "%f - %d %s\n", time, pid, filename) == -1) {
+        fprintf(stderr, "Unable to create log message to file\n");
+        exit(1);
+    }
+
 
     return message;
 
@@ -94,7 +100,7 @@ void findPatternInput(char *pattern) {
  *
  */
 
-void findPatternFileInsensitive(char * filename, char * pattern){
+void findPatternFileInsensitive(char *filename, char *pattern) {
     FILE *file = fopen(filename, "r");
 
     if (file == NULL) {
@@ -125,6 +131,7 @@ void findPatternFileInsensitive(char * filename, char * pattern){
     }
 
     free(buffer);
+    fclose(file);
 }
 
 /*
@@ -174,6 +181,8 @@ void findPatternFile(char *filename, char *pattern) {
  */
 void findWordFile(char *filename, char *pattern) {
 
+    printf("file : %s", filename);
+
     FILE *file = fopen(filename, "r");
 
     if (file == NULL) {
@@ -202,29 +211,27 @@ void findWordFile(char *filename, char *pattern) {
              */
             if (word_location > buffer) {
 
-                if(isalnum(*(word_location-1)))
+                if (isalnum(*(word_location - 1)))
                     continue;
 
                 /*
                  * checking if the word is in the middle of the sentence
                  * so that we don't access invalid memory
                  */
-                if(((word_location + strlen(pattern)) < ( buffer + strlen(buffer)))) {
+                if (((word_location + strlen(pattern)) < (buffer + strlen(buffer)))) {
 
                     if (!isalnum(*(word_location + strlen(pattern)))) {
                         printf("here\n");
                         printf("line %d:%s", nLines, buffer);
                     }
 
-                }
-                else{
-                        printf("line %d:%s", nLines, buffer);
+                } else {
+                    printf("line %d:%s", nLines, buffer);
                 }
 
-            }else if(!isalnum(*(word_location + strlen(pattern)))){
+            } else if (!isalnum(*(word_location + strlen(pattern)))) {
                 printf("line %d:%s", nLines, buffer);
             }
-
 
 
         }
@@ -236,11 +243,11 @@ void findWordFile(char *filename, char *pattern) {
 
 }
 
-void updateLogFile(const char * env, char * message){
-    char * file = getenv(env);
-    FILE * fp = fopen(file,"a+");
+void updateLogFile(const char *env, char *message) {
+    char *file = getenv(env);
+    FILE *fp = fopen(file, "a+");
 
-    if ( fwrite(message, strlen(message), 1, fp) == 0){
+    if (fwrite(message, strlen(message), 1, fp) == 0) {
         fprintf(stderr, "An error occurred while saving to the file\n");
         exit(1);
     }
@@ -249,7 +256,7 @@ void updateLogFile(const char * env, char * message){
 }
 
 
-void analyse_directory(char *directory, char *pattern, const char * env) {
+void analyse_directory(char *directory, char *pattern, const char *env) {
 
     DIR *dirp;
     struct dirent *direntp;
@@ -299,22 +306,22 @@ void analyse_directory(char *directory, char *pattern, const char * env) {
             if (pid == 0) {
                 analyse_directory(name, pattern, env);
                 return;
-            }
-            else {
+            } else {
                 waitpid(pid, NULL, 0);
             }
+
         }
 
     }
 
-    //free(name);
+    free(name);
 
 
 }
 
-void setLogFile(const char * env){
+void setLogFile(const char *env) {
     printf(">>What will be name of the logfile?\n");
-    char * name;
+    char *name;
     size_t size;
 
 
@@ -323,16 +330,15 @@ void setLogFile(const char * env){
     //removing the trailing newline
     name[strcspn(name, "\n")] = 0;
 
-    if (n == -1){
+    if (n == -1) {
         fprintf(stderr, "An error occurred while reading the filename\n");
         exit(1);
-    }
-    else if(n == 0){
+    } else if (n == 0) {
         fprintf(stderr, "An empty file name is not valid\n");
         setLogFile(env);
     }
 
-    if (setenv(env, name, 1) != 0){
+    if (setenv(env, name, 1) != 0) {
         fprintf(stderr, "An error occurred while adding the variable\n");
         exit(1);
     }
@@ -343,14 +349,15 @@ void setLogFile(const char * env){
 }
 
 
-int main(int argc, char *const argv[], char * envp[]) {
+int main(int argc, char *const argv[], char *envp[]) {
 
     /*
      * Setting up the env variable
      */
-    const char * env = "LOGFILENAME";
+    const char *env = "LOGFILENAME";
 
     setLogFile(env);
+
 
     struct sigaction action;
     action.sa_handler = parent_sigint_handler;
@@ -368,16 +375,21 @@ int main(int argc, char *const argv[], char * envp[]) {
         exit(1);
     }
 
+
     char *pattern = argv[1];
+
 
     if (argc == 2) {
         findPatternInput(pattern);
         exit(0);
     }
 
+
     char *directory = argv[2];
 
+
     analyse_directory(directory, pattern, env);
+
 
     return 0;
 }
