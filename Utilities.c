@@ -236,14 +236,12 @@ void findPatternFile(char *filename, char *pattern, options *op) {
 
     char *word_location;
 
-    int n = 0;
+    ssize_t n = 0;
 
     int nLines = 0;
 
     int lineCounter = 0;
 
-
-    if (op->showOnlyFileName) printf("%s\n", filename);
 
     while ((n = getline(&buffer, &size, file)) != -1) {
         ++nLines;
@@ -251,11 +249,18 @@ void findPatternFile(char *filename, char *pattern, options *op) {
         if (((word_location = strstr(buffer, pattern)) != NULL && !op->ignoreCase) ||
             (op->ignoreCase && (word_location = strcasestr(buffer, pattern)) != NULL)) {
 
-            if (!op->completeWord || completeWord(buffer, pattern, word_location)) {
-                if (op->showNumberOfLines) lineCounter++;
-                else {
-                    if (op->showLineNumber) printf("%d:", nLines);
-                    printf("%s", buffer);
+            /*
+             * if the word was found and we only need to print the filename
+             */
+            if (op->showOnlyFileName) printf("%s\n", filename);
+            else {
+
+                if (!op->completeWord || completeWord(buffer, pattern, word_location)) {
+                    if (op->showNumberOfLines) lineCounter++;
+                    else {
+                        if (op->showLineNumber) printf("%d:", nLines);
+                        printf("%s", buffer);
+                    }
                 }
             }
         }
@@ -287,6 +292,11 @@ void analyse_directory(char *directory, char *pattern, options *op) {
     if (S_ISREG(stat_buf.st_mode)) {
         findPatternFile(directory, pattern, op);
         return;
+    } else if (S_ISDIR(stat_buf.st_mode)) {
+        if (!op->recursive) {
+            printf("%s is a directory\n", directory);
+            exit(0);
+        }
     }
 
 
@@ -312,7 +322,8 @@ void analyse_directory(char *directory, char *pattern, options *op) {
              * Need to prevent it from opening the current and previous directory again
              */
         else if (S_ISDIR(stat_buf.st_mode) && (strcmp(direntp->d_name, ".") != 0) &&
-                 ((strcmp(direntp->d_name, "..") != 0))) {
+                 ((strcmp(direntp->d_name, "..") != 0)) && op->recursive) {
+
 
             sigset_t signal_set;
             sigemptyset(&signal_set);
@@ -371,7 +382,7 @@ void setLogFile() {
         exit(1);
     } else if (n == 0) {
         fprintf(stderr, "An empty file name is not valid\n");
-        setLogFile(env);
+        setLogFile();
     }
 
     //removing the trailing newline
@@ -476,7 +487,9 @@ int main(int argc, char *const argv[]) {
         exit(1);
     }
 
-    setLogFile();
+    setLogFile(env);
+
+    fprintf(stderr, "Analyse\n");
     analyseAction(argc, argv);
 
 
