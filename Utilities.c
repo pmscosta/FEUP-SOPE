@@ -242,20 +242,24 @@ void findPatternFile(char *filename, char *pattern, options *op) {
 
     int lineCounter = 0;
 
-
-    if (op->showOnlyFileName) printf("%s\n", filename);
-
     while ((n = getline(&buffer, &size, file)) != -1) {
         ++nLines;
 
         if (((word_location = strstr(buffer, pattern)) != NULL && !op->ignoreCase) ||
             (op->ignoreCase && (word_location = strcasestr(buffer, pattern)) != NULL)) {
 
-            if (!op->completeWord || completeWord(buffer, pattern, word_location)) {
-                if (op->showNumberOfLines) lineCounter++;
-                else {
-                    if (op->showLineNumber) printf("%d:", nLines);
-                    printf("%s", buffer);
+            /*
+             * if the word was found and we only need to print the filename
+             */
+            if (op->showOnlyFileName) printf("%s\n", filename);
+            else {
+
+                if (!op->completeWord || completeWord(buffer, pattern, word_location)) {
+                    if (op->showNumberOfLines) lineCounter++;
+                    else {
+                        if (op->showLineNumber) printf("%d:", nLines);
+                        printf("%s", buffer);
+                    }
                 }
             }
         }
@@ -307,12 +311,17 @@ void analyse_directory(char *directory, char *pattern, options *op) {
         if (S_ISREG(stat_buf.st_mode)) {
             updateLogFile(createFileMessage(getTime(), getpid(), name, OPEN));
             findPatternFile(name, pattern, op);
+        }else if (S_ISDIR(stat_buf.st_mode)) {
+            if (!op->recursive) {
+                printf("%s is a directory\n", directory);
+                exit(0);
+                }
         }
             /*
              * Need to prevent it from opening the current and previous directory again
              */
         else if (S_ISDIR(stat_buf.st_mode) && (strcmp(direntp->d_name, ".") != 0) &&
-                 ((strcmp(direntp->d_name, "..") != 0))) {
+                 ((strcmp(direntp->d_name, "..") != 0)) && op->recursive) {
 
             sigset_t signal_set;
             sigemptyset(&signal_set);
