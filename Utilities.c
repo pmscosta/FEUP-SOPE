@@ -317,6 +317,11 @@ void analyse_directory(char *directory, char *pattern, options *op) {
         if (S_ISREG(stat_buf.st_mode)) {
             updateLogFile(createFileMessage(getTime(), getpid(), name, OPEN));
             findPatternFile(name, pattern, op);
+        }else if (S_ISDIR(stat_buf.st_mode)) {
+            if (!op->recursive) {
+                printf("%s is a directory\n", directory);
+                exit(0);
+                }
         }
             /*
              * Need to prevent it from opening the current and previous directory again
