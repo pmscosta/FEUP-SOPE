@@ -73,37 +73,7 @@ void child_sigint_handler(int signo) {
 
 }
 
-void findPatternInput(char *pattern, options* op) {
 
-    char *buffer;
-
-    char *pattern_location = NULL;
-
-    size_t n;
-
-    while (1) {
-
-        getline(&buffer, &n, stdin);
-
-        //removing the trailing newline
-        buffer[strcspn(buffer, "\n")] = 0;
-
-
-        if (strcmp(buffer, "q") == 0) {
-            break;
-        }
-
-        if ((pattern_location = strstr(buffer, pattern)) != NULL) {
-
-            printf(ANSI_COLOR_RED "%s" ANSI_COLOR_RESET  "\n", buffer);
-
-        }
-
-    }
-
-    free(buffer);
-
-}
 bool completeWord(char* buffer, char* pattern,char *word_location){
 
 
@@ -134,6 +104,41 @@ bool completeWord(char* buffer, char* pattern,char *word_location){
   return false;
 }
 
+void findPatternInput(char *pattern, options* op) {
+
+    char *buffer;
+
+    char *pattern_location = NULL;
+
+    size_t n;
+
+    while (1) {
+
+        getline(&buffer, &n, stdin);
+
+        //removing the trailing newline
+        buffer[strcspn(buffer, "\n")] = 0;
+
+
+        if (strcmp(buffer, "q") == 0) {
+            break;
+        }
+
+        if ((pattern_location = strstr(buffer, pattern)) != NULL) {
+          if (((pattern_location = strstr(buffer, pattern))!=NULL && !op->ignoreCase) || (op->ignoreCase && (pattern_location = strcasestr(buffer, pattern)) != NULL)) {
+
+            if(!op->completeWord || completeWord(buffer,pattern, pattern_location) ){
+                  printf(ANSI_COLOR_RED "%s" ANSI_COLOR_RESET  "\n", buffer);
+            }
+          }
+
+        }
+
+    }
+
+    free(buffer);
+
+}
 /*
  * search for the pattern, taking in consideration the case
  *
@@ -299,7 +304,7 @@ void reset(options * op){
 }
 
 
-int analyseAction(int argc, char *const argv[], const char* env){
+void analyseAction(int argc, char *const argv[], const char* env){
 
 
     char *pattern;
@@ -335,10 +340,10 @@ int analyseAction(int argc, char *const argv[], const char* env){
       analyse_directory(directory, pattern, op, env);
     }else if (i==argc -1){
       pattern = argv[i];
-      findPatternInput(pattern, op);
-    }else return -1;
+      if(op->showLineNumber || op->showOnlyFileName|| op->recursive ||op->showNumberOfLines){printf("Invalid flags for a STDIN read\n");
+      else findPatternInput(pattern, op);
+    }else printf("Unable to recognize flags\n");
 
-    return 0;
 }
 
 int main(int argc, char *const argv[]) {
@@ -364,9 +369,7 @@ int main(int argc, char *const argv[]) {
         exit(1);
     }
 
-    if(analyseAction(argc,argv,env)== -1){
-        printf("Unable to recognize flags\n");
-    }
+    analyseAction(argc,argv,env)
 
 
 
