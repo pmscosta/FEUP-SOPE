@@ -15,6 +15,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <ctype.h>
 
 #define MAX_BUFFER_LENGHT 1024
 #define ANSI_COLOR_RED     "\x1b[31m"
@@ -76,6 +77,50 @@ void findPatternInput(char *pattern) {
 
 }
 
+/*
+ * search for the pattern, ignoring the case of both
+ * to be used with -i flag
+ *
+ */
+
+void findPatternFileInsensitive(char * filename, char * pattern){
+    FILE *file = fopen(filename, "r");
+
+    if (file == NULL) {
+        fprintf(stderr, "could not open: %s\n", filename);
+        exit(2);
+    }
+
+    char *buffer = NULL;
+
+    size_t size = 0;
+
+    char *word_location;
+
+    size_t n = 0;
+
+    int nLines = 0;
+
+    while ((n = getline(&buffer, &size, file)) != -1) {
+
+        ++nLines;
+
+        if ((word_location = strcasestr(buffer, pattern)) != NULL) {
+
+            printf("line %d:%s", nLines, buffer);
+
+        }
+
+    }
+
+    free(buffer);
+}
+
+/*
+ * search for the pattern, taking in consideration the case
+ *
+ */
+
 void findPatternFile(char *filename, char *pattern) {
 
     FILE *file = fopen(filename, "r");
@@ -101,13 +146,81 @@ void findPatternFile(char *filename, char *pattern) {
 
         if ((word_location = strstr(buffer, pattern)) != NULL) {
 
-            printf("line %d: %s", nLines, buffer);
+            printf("line %d:%s", nLines, buffer);
 
         }
 
     }
 
     free(buffer);
+
+}
+
+/*
+ * search for the full pattern in the file
+ *
+ */
+void findWordFile(char *filename, char *pattern) {
+
+    FILE *file = fopen(filename, "r");
+
+    if (file == NULL) {
+        fprintf(stderr, "could not open: %s\n", filename);
+        exit(2);
+    }
+
+    char *buffer = NULL;
+
+    size_t size = 0;
+
+    char *word_location;
+
+    size_t n = 0;
+
+    int nLines = 0;
+
+    while ((n = getline(&buffer, &size, file)) != -1) {
+
+        ++nLines;
+
+        if ((word_location = strstr(buffer, pattern)) != NULL) {
+
+            /*
+             * checking if word is not in the beginning of the sentence
+             */
+            if (word_location > buffer) {
+
+                if(isalnum(*(word_location-1)))
+                    continue;
+
+                /*
+                 * checking if the word is in the middle of the sentence
+                 * so that we don't access invalid memory
+                 */
+                if(((word_location + strlen(pattern)) < ( buffer + strlen(buffer)))) {
+
+                    if (!isalnum(*(word_location + strlen(pattern)))) {
+                        printf("here\n");
+                        printf("line %d:%s", nLines, buffer);
+                    }
+
+                }
+                else{
+                        printf("line %d:%s", nLines, buffer);
+                }
+
+            }else if(!isalnum(*(word_location + strlen(pattern)))){
+                printf("line %d:%s", nLines, buffer);
+            }
+
+
+
+        }
+
+    }
+
+    free(buffer);
+
 
 }
 
