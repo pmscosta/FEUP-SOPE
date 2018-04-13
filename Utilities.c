@@ -25,6 +25,11 @@
 #define CLOSE 0
 #define OPEN 1
 
+/*
+ * Setting up the env variable
+ */
+const char *env = "LOGFILENAME";
+
 typedef struct {
     bool ignoreCase;
     bool showOnlyFileName;
@@ -49,47 +54,7 @@ double getTime() {
     return time;
 }
 
-void parent_sigint_handler(int signo) {
-    int repeat = 1;
-
-    while (repeat) {
-        repeat = 0;
-        fprintf(stderr, "\nAre you sure you want to quit? (Y/N): ");
-        char option;
-        scanf("%c", &option);
-
-        if (option == 'Y' || option == 'y') {
-            kill(-getpgrp(), SIGUSR1);
-            exit(0);
-        } else if (option == 'N' || option == 'n') {
-            kill(-getpgrp(), SIGUSR2);
-        } else {
-            repeat = 1;
-        }
-    }
-}
-
-
-void child_sigint_handler(int signo) {
-    switch (signo) {
-        case SIGINT:
-            pause();
-            break;
-        case SIGUSR1:
-            exit(0);
-            break;
-        case SIGUSR2:
-            break;
-    }
-
-}
-
-void parent_sigchld_handler(int signo) {
-    while (waitpid(-1, NULL, WNOHANG) > 0);
-}
-
-
-void updateLogFile(const char *env, char *message) {
+void updateLogFile(char *message) {
     char *file = getenv(env);
     FILE *fp = fopen(file, "a+");
 
@@ -101,6 +66,18 @@ void updateLogFile(const char *env, char *message) {
     fclose(fp);
 }
 
+
+char *createMessage(double time, int pid, char *text) {
+
+    char *message = NULL;
+
+    if (asprintf(&message, "%.2f - %d %s\n", time, pid, text) == -1) {
+        fprintf(stderr, "Unable to create log message to file\n");
+        exit(1);
+    }
+
+    return message;
+}
 
 char *createFileMessage(double time, int pid, char *filename, int mode) {
 
@@ -124,6 +101,53 @@ char *createFileMessage(double time, int pid, char *filename, int mode) {
     return message;
 
 }
+
+
+void parent_sigint_handler(int signo) {
+
+    if(signo != SIGINT) return;
+    int repeat = 1;
+
+    while (repeat) {
+        repeat = 0;
+        fprintf(stderr, "\nAre you sure you want to quit? (Y/N): ");
+        char option;
+        scanf("%c", &option);
+
+        if (option == 'Y' || option == 'y') {
+            kill(-getpgrp(), SIGUSR1);
+            exit(0);
+        } else if (option == 'N' || option == 'n') {
+            kill(-getpgrp(), SIGUSR2);
+        } else {
+            repeat = 1;
+        }
+    }
+}
+
+
+void child_sigint_handler(int signo) {
+    switch (signo) {
+        case SIGINT:
+            updateLogFile(createMessage(getTime(), getpid(), "SINAL INT"));
+            pause();
+            break;
+        case SIGUSR1:
+            updateLogFile(createMessage(getTime(), getpid(), "SINAL USR1"));
+            exit(0);
+            break;
+        case SIGUSR2:
+            updateLogFile(createMessage(getTime(), getpid(), "SINAL USR2"));
+            break;
+    }
+
+}
+
+void parent_sigchld_handler(int signo) {
+    if(signo != SIGCHLD) return;
+    while (waitpid(-1, NULL, WNOHANG) > 0);
+}
+
 
 
 bool completeWord(char *buffer, char *pattern, char *word_location) {
@@ -197,7 +221,7 @@ void findPatternInput(char *pattern, options *op) {
  *
  */
 
-void findPatternFile(char *filename, char *pattern, options *op, const char *env) {
+void findPatternFile(char *filename, char *pattern, options *op) {
 
     FILE *file = fopen(filename, "r");
 
@@ -212,12 +236,14 @@ void findPatternFile(char *filename, char *pattern, options *op, const char *env
 
     char *word_location;
 
-    size_t n = 0;
+    int n = 0;
 
     int nLines = 0;
 
     int lineCounter = 0;
 
+
+    if (op->showOnlyFileName) printf("%s\n", filename);
 
     while ((n = getline(&buffer, &size, file)) != -1) {
         ++nLines;
@@ -225,18 +251,11 @@ void findPatternFile(char *filename, char *pattern, options *op, const char *env
         if (((word_location = strstr(buffer, pattern)) != NULL && !op->ignoreCase) ||
             (op->ignoreCase && (word_location = strcasestr(buffer, pattern)) != NULL)) {
 
-            /*
-             * if the word was found and we only need to print the filename
-             */
-            if (op->showOnlyFileName) printf("%s\n", filename);
-            else {
-
-                if (!op->completeWord || completeWord(buffer, pattern, word_location)) {
-                    if (op->showNumberOfLines) lineCounter++;
-                    else {
-                        if (op->showLineNumber) printf("%d:", nLines);
-                        printf("%s", buffer);
-                    }
+            if (!op->completeWord || completeWord(buffer, pattern, word_location)) {
+                if (op->showNumberOfLines) lineCounter++;
+                else {
+                    if (op->showLineNumber) printf("%d:", nLines);
+                    printf("%s", buffer);
                 }
             }
         }
@@ -245,13 +264,13 @@ void findPatternFile(char *filename, char *pattern, options *op, const char *env
 
     free(buffer);
 
-    updateLogFile(env, createFileMessage(getTime(), getpid(), filename, CLOSE));
+    updateLogFile(createFileMessage(getTime(), getpid(), filename, CLOSE));
     fclose(file);
 
 }
 
 
-void analyse_directory(char *directory, char *pattern, options *op, const char *env) {
+void analyse_directory(char *directory, char *pattern, options *op) {
 
     DIR *dirp;
     struct dirent *direntp;
@@ -266,13 +285,8 @@ void analyse_directory(char *directory, char *pattern, options *op, const char *
      * if so, only do the normal search and exit
      */
     if (S_ISREG(stat_buf.st_mode)) {
-        findPatternFile(directory, pattern, op, env);
+        findPatternFile(directory, pattern, op);
         return;
-    } else if (S_ISDIR(stat_buf.st_mode)) {
-        if (!op->recursive) {
-            printf("%s is a directory\n", directory);
-            exit(0);
-        }
     }
 
 
@@ -291,14 +305,14 @@ void analyse_directory(char *directory, char *pattern, options *op, const char *
         }
 
         if (S_ISREG(stat_buf.st_mode)) {
-            updateLogFile(env, createFileMessage(getTime(), getpid(), name, OPEN));
-            findPatternFile(name, pattern, op, env);
+            updateLogFile(createFileMessage(getTime(), getpid(), name, OPEN));
+            findPatternFile(name, pattern, op);
         }
             /*
              * Need to prevent it from opening the current and previous directory again
              */
         else if (S_ISDIR(stat_buf.st_mode) && (strcmp(direntp->d_name, ".") != 0) &&
-                 ((strcmp(direntp->d_name, "..") != 0)) && op->recursive) {
+                 ((strcmp(direntp->d_name, "..") != 0))) {
 
             sigset_t signal_set;
             sigemptyset(&signal_set);
@@ -330,7 +344,7 @@ void analyse_directory(char *directory, char *pattern, options *op, const char *
                 }
 
                 sigprocmask(SIG_UNBLOCK, &signal_set, NULL);
-                analyse_directory(name, pattern, op, env);
+                analyse_directory(name, pattern, op);
                 return;
             } else {
                 sigprocmask(SIG_UNBLOCK, &signal_set, NULL);
@@ -345,7 +359,7 @@ void analyse_directory(char *directory, char *pattern, options *op, const char *
     free(name);
 }
 
-void setLogFile(const char *env) {
+void setLogFile() {
     printf(">>What will be name of the logfile?\n");
     char *name = NULL;
     size_t size;
@@ -382,7 +396,7 @@ void reset(options *op) {
 }
 
 
-void analyseAction(int argc, char *const argv[], const char *env) {
+void analyseAction(int argc, char *const argv[]) {
 
 
     char *pattern;
@@ -415,7 +429,7 @@ void analyseAction(int argc, char *const argv[], const char *env) {
     if (i == argc - 2) {
         directory = argv[argc - 1];
         pattern = argv[i];
-        analyse_directory(directory, pattern, op, env);
+        analyse_directory(directory, pattern, op);
     } else if (i == argc - 1) {
         pattern = argv[i];
         if (op->showLineNumber || op->showOnlyFileName || op->recursive || op->showNumberOfLines)
@@ -462,15 +476,8 @@ int main(int argc, char *const argv[]) {
         exit(1);
     }
 
-    /*
-     * Setting up the env variable
-     */
-    const char *env = "LOGFILENAME";
-
-    setLogFile(env);
-
-    fprintf(stderr, "Analyse\n");
-    analyseAction(argc, argv, env);
+    setLogFile();
+    analyseAction(argc, argv);
 
 
     return 0;

@@ -4,7 +4,7 @@ OBJECTS = Utilities.o
 default: Utilities
 
 %.o: %.c $(HEADERS)
-	gcc -c $< -o $@
+	gcc -Wall -Wextra -Werror -c $< -o $@
 
 program: $(OBJECTS)
 	gcc $(OBJECTS) -o $@
