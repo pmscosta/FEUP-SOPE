@@ -29,6 +29,7 @@ void createRequest(client_t *client, int time_out, int num_wanted_seats, int *pr
     req->time_out = time_out;
     req->num_wanted_seats = num_wanted_seats;
     req->pref_seat_list = pref_seat_list;
+    req->answer_fifo_name = client->answer_fifo_name;
 }
 
 void openRequestFifo(client_t *client){
@@ -132,4 +133,6 @@ int main(int argc, char *argv[]){
   readAnswer(client);
 
   free_client(client);
+
+  return 0;
 }
