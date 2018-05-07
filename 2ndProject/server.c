@@ -73,18 +73,23 @@ void readRequestServer(server_t *server){
   
   while(1){
     pthread_mutex_lock(&unit_buffer_mut);
+    fprintf(stderr, "Lock Server\n");
     if((n = read(server->fdRequest,&request_buffer,sizeof(request_t))) != -1){
       pthread_mutex_unlock(&unit_buffer_mut);
-     
+     fprintf(stderr, "Unlock Server\n");
       unit_buffer_full = 1;
       pthread_cond_broadcast(&unit_buffer_cond);
+      fprintf(stderr, "Send Condition Server\n");
 
       close(server->fdRequest);
       openRequestFifo(server);
       continue;
     }
-    else break;
 
+    else {
+      pthread_mutex_unlock(&unit_buffer_mut);
+      break;
+    }
   }
 }
 
@@ -138,12 +143,16 @@ void openAnswerFifo(thread_t *thread){
 
 void readRequestThread(thread_t *thread){
  
+  fprintf(stderr, "Lock Thread\n");
   pthread_mutex_lock(&unit_buffer_mut);
   
   while(1){
       
-      while(unit_buffer_full != 1)
+      while(unit_buffer_full != 1){
+        fprintf(stderr, "Wait Condition Server\n");
         pthread_cond_wait(&unit_buffer_cond,&unit_buffer_mut);
+      }
+       
       
       unit_buffer_full = 0;
       
