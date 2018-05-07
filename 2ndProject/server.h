@@ -4,8 +4,7 @@
 #include <stdbool.h>
 #include "structs.h"
 
-#define MAX_ROOM_SEATS  9999 
-#define MAX_CLI_SEATS   99
+
 
 
 typedef struct{
@@ -41,7 +40,7 @@ typedef struct{
     int fdRequest;
     
     //Possivelmente deve ficar memoria partilhada
-    request_t *request_buffer;  //Unit buffer
+
 
 } server_t;
 

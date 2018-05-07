@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <string.h>
 #include "client.h"
 
 
@@ -28,8 +29,8 @@ void createRequest(client_t *client, int time_out, int num_wanted_seats, int *pr
 
     req->time_out = time_out;
     req->num_wanted_seats = num_wanted_seats;
-    req->pref_seat_list = pref_seat_list;
-    req->answer_fifo_name = client->answer_fifo_name;
+    memcpy(req->pref_seat_list, pref_seat_list, MAX_CLI_SEATS);
+    memcpy(req->answer_fifo_name, client->answer_fifo_name, MAX_ANS_FIFO);
 }
 
 void openRequestFifo(client_t *client){
@@ -78,6 +79,7 @@ void sendRequest(client_t *client){
     fprintf(stderr, "Error writing to fifo request\n");
     exit(2);
   }
+
 }
 
 void readAnswer(client_t *client){
@@ -123,15 +125,12 @@ int main(int argc, char *argv[]){
 
   client_t * client = new_client();
   
+  createAnswerFifo(client);
   createRequest(client, time_out, num_wanted_seats, pref_seat_list);
   openRequestFifo(client);
- 
-  createAnswerFifo(client);
+  sendRequest(client); 
   openAnswerFifo(client);
- 
-  sendRequest(client);
   readAnswer(client);
-
   free_client(client);
 
   return 0;

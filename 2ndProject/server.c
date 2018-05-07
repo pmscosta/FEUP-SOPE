@@ -8,13 +8,20 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <string.h>
 #include "server.h"
+
+pthread_mutex_t unit_buffer_mut = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t unit_buffer_cond = PTHREAD_COND_INITIALIZER;
+int unit_buffer_full = 0;
+request_t request_buffer;
 
 void * thr_run(void * thr){
   thread_t * thread = (thread_t *) thr;
   
   while(1){
     readRequestThread(thread);
+    printf("%s", thread->request->answer_fifo_name);
     sendAnswer(thread);
   }
 }
@@ -33,8 +40,6 @@ server_t * new_server(int num_room_seats, int num_ticket_offices, int open_time)
     server->room_seats[i] = (Seat*) malloc(sizeof(Seat));
     (server->room_seats[i])->reserved = false;
   }
-
-  server->request_buffer = (request_t *) malloc(sizeof(request_t));
 
   return server;
 }
@@ -65,13 +70,21 @@ void openRequestFifo(server_t *server){
 
 void readRequestServer(server_t *server){
   int n;
-  while( (n = read(server->fdRequest,server->request_buffer,sizeof(request_t))) != -1 ){
+  
+  while(1){
+    pthread_mutex_lock(&unit_buffer_mut);
+    if((n = read(server->fdRequest,&request_buffer,sizeof(request_t))) != -1){
+      pthread_mutex_unlock(&unit_buffer_mut);
+     
+      unit_buffer_full = 1;
+      pthread_cond_broadcast(&unit_buffer_cond);
 
-      if(n == 0){
-        close(server->fdRequest);
-        openRequestFifo(server);
-        continue;
-      }
+      close(server->fdRequest);
+      openRequestFifo(server);
+      continue;
+    }
+    else break;
+
   }
 }
 
@@ -84,7 +97,7 @@ void createThreads(server_t *server){
 
 void runThreads(server_t *server){
   for(unsigned int i = 0; i < server->num_ticket_offices; i++){
-    pthread_create(&((server->ticket_offices[i])->tid), NULL, thr_run, &(server->ticket_offices[i]));
+    pthread_create(&((server->ticket_offices[i])->tid), NULL, thr_run, (server->ticket_offices[i]));
   }
 }
 
@@ -124,7 +137,30 @@ void openAnswerFifo(thread_t *thread){
 }
 
 void readRequestThread(thread_t *thread){
+ 
+  pthread_mutex_lock(&unit_buffer_mut);
+  
+  while(1){
+      
+      while(unit_buffer_full != 1)
+        pthread_cond_wait(&unit_buffer_cond,&unit_buffer_mut);
+      
+      unit_buffer_full = 0;
+      
+      *(thread->request) = request_buffer;
+      
+      fprintf(stderr, "%d\n", thread->request->time_out);
+      fprintf(stderr, "%d\n", thread->request->num_wanted_seats);
+      fprintf(stderr, "%s\n", thread->request->answer_fifo_name);
 
+      for(int i = 0; i < thread->request->num_wanted_seats; i++){
+          fprintf(stderr, "%d\n", thread->request->pref_seat_list[i]);
+      }
+      
+      
+  }
+
+  pthread_mutex_unlock(&unit_buffer_mut);
 }
 
 void sendAnswer(thread_t *thread){
@@ -153,7 +189,6 @@ int main(int argc,  char* argv[]){
   server_t * server = new_server(num_room_seats, num_ticket_offices, open_time);
   createRequestFifo(server);
   openRequestFifo(server);
-
   createThreads(server);
   runThreads(server);
 

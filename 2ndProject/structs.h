@@ -12,6 +12,10 @@
 #define WIDTH_XXNN  5
 #define WIDTH_SEAT  4
 
+#define MAX_ROOM_SEATS  9999 
+#define MAX_CLI_SEATS   99
+
+#define MAX_ANS_FIFO    8
 
 #define REQ_FIFO    "requests"
 #define ANS_FIFO    "ans"
@@ -20,8 +24,8 @@
 typedef struct{
     int time_out;
     int num_wanted_seats;
-    int * pref_seat_list;
-    char * answer_fifo_name;
+    int pref_seat_list[MAX_CLI_SEATS];
+    char answer_fifo_name[MAX_ANS_FIFO];
 }request_t;
 
 
