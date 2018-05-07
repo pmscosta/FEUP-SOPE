@@ -23,12 +23,13 @@ client_t * new_client(){
   return client;
 }
 
-void createRequest(client_t *client, int time_out, int num_wanted_seats, int *pref_seat_list){
+void createRequest(client_t *client, int time_out, int num_wanted_seats, int num_pref_seats, int *pref_seat_list){
     
     request_t * req = client->request;
 
     req->time_out = time_out;
     req->num_wanted_seats = num_wanted_seats;
+    req->num_pref_seats = num_pref_seats;
     memcpy(req->pref_seat_list, pref_seat_list, MAX_CLI_SEATS);
     memcpy(req->answer_fifo_name, client->answer_fifo_name, MAX_ANS_FIFO);
 }
@@ -118,15 +119,17 @@ int main(int argc, char *argv[]){
   int num_wanted_seats = atoi(argv[2]);
   int pref_seat_list[num_wanted_seats];
 
+  unsigned int index = 0; 
+
   //Possivel erro Out of range se introduzidos mais valores que os especificados
-  for(unsigned int i = 3, index = 0; argv[i] != NULL; i++, index++){
+  for(unsigned int i = 3; argv[i] != NULL; i++, index++){
     pref_seat_list[index] = atoi(argv[i]);
   }
 
   client_t * client = new_client();
   
   createAnswerFifo(client);
-  createRequest(client, time_out, num_wanted_seats, pref_seat_list);
+  createRequest(client, time_out, num_wanted_seats, index, pref_seat_list);
   openRequestFifo(client);
   sendRequest(client); 
   openAnswerFifo(client);

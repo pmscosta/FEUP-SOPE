@@ -4,13 +4,17 @@
 #include <stdbool.h>
 #include "structs.h"
 
-
-
+typedef struct{
+    int clientID;
+    bool reserved;
+    pthread_mutex_t mutex;
+} Seat;
 
 typedef struct{
     pthread_t tid;
     request_t *request;
     answer_t *answer;
+    Seat ** seats;
 
     int fdAnswer;
 } thread_t;
@@ -20,14 +24,11 @@ void free_thread(thread_t *thread);
 
 void openAnswerFifo(thread_t *thread);
 void readRequestThread(thread_t *thread);
+int validateRequestThread(thread_t * thread);
+int processRequest(thread_t * thread);
 void sendAnswer(thread_t *thread);
+void sendFailedAnswer(thread_t * thread, int value);
 
-
-
-
-typedef struct{
-    bool reserved;
-} Seat;
 
 typedef struct{
     Seat **room_seats;
@@ -43,6 +44,7 @@ typedef struct{
 
 
 } server_t;
+
 
 server_t * new_server();
 void free_server(server_t *server);

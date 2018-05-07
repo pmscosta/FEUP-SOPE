@@ -22,7 +22,7 @@ void createAnswerFifo(client_t *client);
 void openRequestFifo(client_t *client);
 void openAnswerFifo(client_t *client);
 
-void createRequest(client_t *client, int time_out, int num_wanted_seats, int *pref_seat_list);
+void createRequest(client_t *client, int time_out, int num_wanted_seats, int num_pref_seats, int *pref_seat_list);
 void sendRequest(client_t *client);
 void readAnswer(client_t *client);
 

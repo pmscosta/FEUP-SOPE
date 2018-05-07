@@ -20,10 +20,17 @@
 #define REQ_FIFO    "requests"
 #define ANS_FIFO    "ans"
 
+#define INVALID_NUM_SEATS       -1
+#define INVALID_PREF_NUMBER     -2
+#define INVALID_SEATS_ID        -3
+#define INVALID_PARAMETHERS     -4
+#define UNAVALIABLE_SEAT        -5
+#define ROOM_FULL               -6
 
 typedef struct{
     int time_out;
     int num_wanted_seats;
+    int num_pref_seats;
     int pref_seat_list[MAX_CLI_SEATS];
     char answer_fifo_name[MAX_ANS_FIFO];
 }request_t;
