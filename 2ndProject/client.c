@@ -98,6 +98,12 @@ void readAnswer(client_t *client){
 
 }
 
+void displayAnswer(answer_t *answer){
+  printf("--->Message\n");
+  printf("response_value= %d\n", answer->response_value);
+  printf("num_reserved_seats= %d\n", answer->num_reserved_seats);
+}
+
 void free_client(client_t *client){
   close(client->fdRequest);
   free(client->request);
@@ -131,9 +137,14 @@ int main(int argc, char *argv[]){
   createAnswerFifo(client);
   createRequest(client, time_out, num_wanted_seats, index, pref_seat_list);
   openRequestFifo(client);
+  printf("Sending request ...\n");
   sendRequest(client); 
+  printf("Opening answer fifo ...\n");
   openAnswerFifo(client);
+  printf("Reading answer from fifo ...\n");
   readAnswer(client);
+  displayAnswer(client->answer);
+  printf("Exit ...\n");
   free_client(client);
 
   return 0;

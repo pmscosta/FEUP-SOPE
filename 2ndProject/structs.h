@@ -20,6 +20,7 @@
 #define REQ_FIFO    "requests"
 #define ANS_FIFO    "ans"
 
+#define VALID_RESERVATION       0
 #define INVALID_NUM_SEATS       -1
 #define INVALID_PREF_NUMBER     -2
 #define INVALID_SEATS_ID        -3

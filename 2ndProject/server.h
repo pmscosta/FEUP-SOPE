@@ -24,10 +24,13 @@ void free_thread(thread_t *thread);
 
 void openAnswerFifo(thread_t *thread);
 void readRequestThread(thread_t *thread);
-int validateRequestThread(thread_t * thread);
+void validateRequestThread(thread_t * thread);
 int processRequest(thread_t * thread);
 void sendAnswer(thread_t *thread);
-void sendFailedAnswer(thread_t * thread, int value);
+void sendFailedAnswer(thread_t * thread);
+void validParameters(thread_t * thread);
+void resetThread(thread_t *thread);
+void displayAnswer(answer_t *answer);
 
 
 typedef struct{
