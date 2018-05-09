@@ -14,26 +14,6 @@
 #include <string.h>
 #include "client.h"
 
-bool receivedMessage = false;
-
-client_t * client = NULL;
-
-/*
-  Handles the timeout
-  If we have received the message it does nothing
-  Else it terminates it
-*/
-void sigusr_handler(int signo){
-
-    if(!receivedMessage){
-      fprintf(stderr, "Did not receive the message in time\n");
-      free_client(client);
-      exit(1);
-    }
-
-}
-
-
 client_t * new_client(){
   
   client_t * client = (client_t *) malloc(sizeof(client_t));
@@ -97,7 +77,6 @@ void openAnswerFifo(client_t *client){
 
 void sendRequest(client_t *client){
   //TODO: Possiveis erros: verificar valor do fd e do req
-
   if (write(client->fdRequest, client->request, sizeof(request_t)) == -1){
     perror("Error");
     fprintf(stderr, "Error writing to fifo request\n");
@@ -117,10 +96,8 @@ void readAnswer(client_t *client){
     }else
       break;
     
-
+    
   } 
-
-  receivedMessage = true;
 
 }
 
@@ -140,24 +117,6 @@ void free_client(client_t *client){
   }
   free(client->answer);
   free(client->answer_fifo_name);
-}
-
-void startCountdown(int timeout){
-
-  struct timespec tim, tim2;
-
-  int secs = timeout / 1000;
-  int milisecs = timeout % 1000;
-
-  tim.tv_sec = secs;
-  tim.tv_nsec = milisecs * 1000000;
-
-  if(nanosleep(&tim, &tim2) < 0){
-    fprintf(stderr, "Unable to call nanosleep\n");
-    exit(3);
-  }
-
-  return;
 }
 
 int main(int argc, char *argv[]){
@@ -194,37 +153,13 @@ int main(int argc, char *argv[]){
     pch = strtok(NULL, " ");
   }
 
-
-  //INSTALLING HANDLER
-  struct sigaction sa; 
-  sa.sa_handler = sigusr_handler;
-  sa.sa_flags = 0;
-  sigemptyset(&sa.sa_mask);
-
-  if(sigaction(SIGUSR1, &sa, NULL) == -1){
-    fprintf(stderr, "unable to install sigusr1 error\n");
-    exit(2);
-  }
-
-  client = new_client();
+  client_t * client = new_client();
   
   createAnswerFifo(client);
   createRequest(client, time_out, num_wanted_seats, pref_number, pref_seat_list);
   openRequestFifo(client);
   printf("Sending request ...\n");
   sendRequest(client); 
-
-  //INITIALIZING COUNTER IN CHILD
-
-  pid_t ppid = getpid();
-  pid_t pid = fork();
-
-  if(pid == 0){
-    startCountdown(time_out);
-    kill(ppid, SIGUSR1);
-    return 0;
-  }
-
   printf("Close request ...\n");
   close(client->fdRequest);
   printf("Opening answer fifo ...\n");

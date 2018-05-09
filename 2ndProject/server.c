@@ -120,11 +120,12 @@ void openRequestFifo(server_t *server)
 }
 
 void displayRequest(request_t req){
+  printf("\n\n-----------------_MESSAGE INFO------------------\n");
   printf("time_out %d \n", req.time_out);
   printf("num_wanted_seats %d \n", req.num_wanted_seats);
   printf("num_pref_seats %d \n", req.num_pref_seats);
   printf("fifo name %s \n", req.answer_fifo_name);
-
+  printf("\n---------------------------------------------------\n");
 }
 
 void readRequestServer(server_t *server)
@@ -232,10 +233,9 @@ void readRequestThread(thread_t *thread)
   } 
   printf("Critical\n");
 
+  (*thread->request) = request_buffer;
+
   unit_buffer_full = 0;
-
-  *(thread->request) = request_buffer;
-
 
   //pthread_cond_signal(&thread_cond);
   pthread_mutex_unlock(&unit_buffer_mut);
@@ -374,6 +374,18 @@ int processRequest(thread_t *thread)
       pthread_mutex_unlock(&(thread->seats[seatNum]->mutex));
       return 0;
     }
+
+    pthread_mutex_unlock(&(thread->seats[seatNum]->mutex));
+  }
+
+   i = 0; 
+  //if the request failed, must free seats
+  for(; i < thread->request->num_pref_seats; i++){
+    int seatNum = thread->request->pref_seat_list[i];
+
+    pthread_mutex_lock(&(thread->seats[seatNum]->mutex));
+
+    freeSeat((*thread->seats), seatNum);
 
     pthread_mutex_unlock(&(thread->seats[seatNum]->mutex));
   }
