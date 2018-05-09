@@ -6,9 +6,32 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <time.h>
+#include <stdbool.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <unistd.h>
 #include <string.h>
 #include "client.h"
+
+bool receivedMessage = false;
+
+client_t * client = NULL;
+
+/*
+  Handles the timeout
+  If we have received the message it does nothing
+  Else it terminates it
+*/
+void sigusr_handler(int signo){
+
+    if(!receivedMessage){
+      fprintf(stderr, "Did not receive the message in time\n");
+      free_client(client);
+      exit(1);
+    }
+
+}
 
 
 client_t * new_client(){
@@ -93,8 +116,11 @@ void readAnswer(client_t *client){
       continue;
     }else
       break;
+    
 
   } 
+
+  receivedMessage = true;
 
 }
 
@@ -116,35 +142,95 @@ void free_client(client_t *client){
   free(client->answer_fifo_name);
 }
 
+void startCountdown(int timeout){
+
+  struct timespec tim, tim2;
+
+  int secs = timeout / 1000;
+  int milisecs = timeout % 1000;
+
+  tim.tv_sec = secs;
+  tim.tv_nsec = milisecs * 1000000;
+
+  if(nanosleep(&tim, &tim2) < 0){
+    fprintf(stderr, "Unable to call nanosleep\n");
+    exit(3);
+  }
+
+  return;
+}
 
 int main(int argc, char *argv[]){
 
   //TODO: Testar possiveis erros;
+  if(argc != 4){
+    printf("Usage: %s <time_out> <num_wanted_seats> <pref_seat_list>\n", argv[0]);
+    exit(1);
+  }
   
   int time_out = atoi(argv[1]);
   int num_wanted_seats = atoi(argv[2]);
-  int pref_seat_list[num_wanted_seats];
+  char * pref_list = argv[3];
+  char * pch;
 
-  unsigned int index = 0; 
+  int * pref_seat_list = NULL;
+  int * new_pos;
+  int pref_number = 0;
 
-  //Possivel erro Out of range se introduzidos mais valores que os especificados
-  for(unsigned int i = 3; argv[i] != NULL; i++, index++){
-    pref_seat_list[index] = atoi(argv[i]);
+  pch = strtok(pref_list, " ");
+
+  while(pch != NULL){
+    pref_number++;
+    new_pos = (int *) realloc(pref_seat_list, pref_number * sizeof(int));
+
+    if(new_pos != NULL){
+      pref_seat_list = new_pos;
+      pref_seat_list[pref_number -1] = atoi(pch);
+    }else{
+      free(new_pos);
+      fprintf(stderr, "Error allocating space for pref seat list\n");
+      exit(1);
+    }
+    pch = strtok(NULL, " ");
   }
 
-  client_t * client = new_client();
+
+  //INSTALLING HANDLER
+  struct sigaction sa; 
+  sa.sa_handler = sigusr_handler;
+  sa.sa_flags = 0;
+  sigemptyset(&sa.sa_mask);
+
+  if(sigaction(SIGUSR1, &sa, NULL) == -1){
+    fprintf(stderr, "unable to install sigusr1 error\n");
+    exit(2);
+  }
+
+  client = new_client();
   
   createAnswerFifo(client);
-  createRequest(client, time_out, num_wanted_seats, index, pref_seat_list);
+  createRequest(client, time_out, num_wanted_seats, pref_number, pref_seat_list);
   openRequestFifo(client);
   printf("Sending request ...\n");
   sendRequest(client); 
+
+  //INITIALIZING COUNTER IN CHILD
+
+  pid_t ppid = getpid();
+  pid_t pid = fork();
+
+  if(pid == 0){
+    startCountdown(time_out);
+    kill(ppid, SIGUSR1);
+    return 0;
+  }
+
   printf("Opening answer fifo ...\n");
   openAnswerFifo(client);
   printf("Reading answer from fifo ...\n");
   readAnswer(client);
   displayAnswer(client->answer);
-  printf("Exit ...\n");
+  printf("Exit...\n");
   free_client(client);
 
   return 0;
