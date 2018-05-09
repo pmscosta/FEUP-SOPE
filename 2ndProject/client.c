@@ -139,6 +139,8 @@ int main(int argc, char *argv[]){
   openRequestFifo(client);
   printf("Sending request ...\n");
   sendRequest(client); 
+  printf("Close request ...\n");
+  close(client->fdRequest);
   printf("Opening answer fifo ...\n");
   openAnswerFifo(client);
   printf("Reading answer from fifo ...\n");
