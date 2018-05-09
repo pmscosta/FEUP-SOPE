@@ -142,16 +142,12 @@ void readRequestServer(server_t *server)
       pthread_mutex_unlock(&unit_buffer_mut);
       fprintf(stderr, "Unlock Server\n");
 
-      //tentativa de não usar o sleep para receber informação
-      pthread_cond_signal(&unit_buffer_cond);
-
       unit_buffer_full = 1;
+      pthread_cond_signal(&unit_buffer_cond);
       fprintf(stderr, "Send Condition Server\n");
 
       close(server->fdRequest);
-      sleep(1);
       openRequestFifo(server);
-      //pthread_cond_wait(&thread_cond, &unit_buffer_mut);
 
       continue;
     }

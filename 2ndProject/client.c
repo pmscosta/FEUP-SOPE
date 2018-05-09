@@ -225,6 +225,8 @@ int main(int argc, char *argv[]){
     return 0;
   }
 
+  printf("Close request ...\n");
+  close(client->fdRequest);
   printf("Opening answer fifo ...\n");
   openAnswerFifo(client);
   printf("Reading answer from fifo ...\n");
