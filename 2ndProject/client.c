@@ -8,11 +8,22 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <stdbool.h>
+#include <sys/wait.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
 #include <string.h>
+#include <time.h>
 #include "client.h"
+
+bool receivedMessage = false;
+
+client_t * client;
+
+void sigalarm_handler(int signo){
+  printf("hello\n");
+}
+
 
 client_t * new_client(){
   
@@ -97,9 +108,9 @@ void readAnswer(client_t *client){
     }else
       break;
     
-    
   } 
 
+  receivedMessage = true;
 }
 
 void displayAnswer(answer_t *answer){
@@ -119,6 +130,7 @@ void free_client(client_t *client){
   free(client->answer);
   free(client->answer_fifo_name);
 }
+
 
 int main(int argc, char *argv[]){
 
@@ -154,13 +166,27 @@ int main(int argc, char *argv[]){
     pch = strtok(NULL, " ");
   }
 
-  client_t * client = new_client();
+  struct sigaction sa; 
+
+  sa.sa_handler = sigalarm_handler;
+  sa.sa_flags = 0; 
+  sigemptyset(&sa.sa_mask);
+
+  if( sigaction(SIGALRM, &sa, NULL) == -1){
+    fprintf(stderr, "Unable to install handler\n"); 
+    exit(1);
+  }
+  
+
+  client = new_client();
   
   createAnswerFifo(client);
   createRequest(client, time_out, num_wanted_seats, pref_number, pref_seat_list);
   openRequestFifo(client);
   printf("Sending request ...\n");
-  sendRequest(client); 
+  sendRequest(client);
+  //starting timer
+  ualarm(time_out * 1000,0);
   printf("Close request ...\n");
   close(client->fdRequest);
   printf("Opening answer fifo ...\n");
