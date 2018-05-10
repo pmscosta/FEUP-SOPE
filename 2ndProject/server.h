@@ -26,6 +26,7 @@ void openAnswerFifo(thread_t *thread);
 void readRequestThread(thread_t *thread);
 void validateRequestThread(thread_t * thread);
 int processRequest(thread_t * thread);
+void unbookSeats(thread_t * thread);
 void sendAnswer(thread_t *thread);
 void sendFailedAnswer(thread_t * thread);
 void validParameters(thread_t * thread);

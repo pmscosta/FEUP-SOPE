@@ -32,6 +32,7 @@ typedef struct{
     int time_out;
     int num_wanted_seats;
     int num_pref_seats;
+    int pid;
     int pref_seat_list[MAX_CLI_SEATS];
     char answer_fifo_name[MAX_ANS_FIFO];
 }request_t;

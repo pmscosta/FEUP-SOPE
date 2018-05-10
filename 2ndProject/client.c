@@ -33,6 +33,7 @@ void createRequest(client_t *client, int time_out, int num_wanted_seats, int num
     req->time_out = time_out;
     req->num_wanted_seats = num_wanted_seats;
     req->num_pref_seats = num_pref_seats;
+    req->pid = (int) client->pid;
     memcpy(req->pref_seat_list, pref_seat_list, MAX_CLI_SEATS);
     memcpy(req->answer_fifo_name, client->answer_fifo_name, MAX_ANS_FIFO);
 }

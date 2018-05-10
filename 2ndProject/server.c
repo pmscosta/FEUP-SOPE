@@ -31,9 +31,10 @@ void *thr_run(void *thr)
 
   while (1)
   {
-  
     printf("reading request..\n");
+
     readRequestThread(thread);
+
     printf("read request\n");
 
     validateRequestThread(thread);
@@ -43,6 +44,7 @@ void *thr_run(void *thr)
 
       printf("-------f------>invalid answer, return code = %d\n", thread->answer->response_value);
       sendFailedAnswer(thread);
+      resetThread(thread);
 
       //TODO continue or break?
       continue;
@@ -77,6 +79,7 @@ server_t *new_server(int num_room_seats, int num_ticket_offices, int open_time)
   for (unsigned int i = 0; i < num_room_seats; i++)
   {
     (server->room_seats[i]).reserved = false;
+    (server->room_seats[i]).clientID = 0;
 
     if (pthread_mutex_init(&(server->room_seats[i].mutex), NULL) != 0)
     {
@@ -299,6 +302,8 @@ void validateRequestThread(thread_t *thread)
   validParameters(thread);
 }
 
+
+
 int isSeatFree(Seat *seats, int seatNum)
 {
   return seats[seatNum].reserved != true;
@@ -313,7 +318,7 @@ void bookSeat(Seat *seats, int seatNum, int clientId)
 }
 void freeSeat(Seat *seats, int seatNum)
 {
-
+  printf("-------------------------------------------------------------->Freeing seat number %d\n", seatNum);
   seats[seatNum].reserved = false;
   seats[seatNum].clientID = 0;
 }
@@ -328,8 +333,29 @@ bool roomFull(Seat *seats)
   return true;
 }
 
+void unbookSeats(thread_t * thread){
+
+  int i = 0; 
+  int id = thread->request->pid;
+
+  //if the request failed, must free seats
+  for(; i < thread->request->num_pref_seats; i++){
+    int seatNum = thread->request->pref_seat_list[i] - 1;
+
+    pthread_mutex_lock(&(thread->seats[seatNum].mutex));
+
+    if(thread->seats[seatNum].clientID == id)
+      freeSeat(thread->seats, seatNum);
+
+    pthread_mutex_unlock(&(thread->seats[seatNum].mutex));
+  }
+
+}
+
 int processRequest(thread_t *thread)
 {
+
+  int id = thread->request->pid;
 
   if (roomFull(thread->seats))
   {
@@ -344,19 +370,21 @@ int processRequest(thread_t *thread)
   for (; i < thread->request->num_pref_seats; i++)
   {
 
-    int seatNum = thread->request->pref_seat_list[i];
+    int seatNum = thread->request->pref_seat_list[i] - 1;
 
     pthread_mutex_lock(&(thread->seats[seatNum].mutex));
 
+    printf("Trying to reserve seat: %d\n", seatNum);
+
     if (isSeatFree(thread->seats, seatNum))
     {
-      bookSeat(thread->seats, seatNum, 2);
+      printf("seat is free %d\n", seatNum);
+      bookSeat(thread->seats, seatNum, id);
       numberOfSeatsReserved++;
     }
     else
     {
       thread->answer->response_value = UNAVALIABLE_SEAT;
-      printf("Occupied\n");
     }
 
     if (numberOfSeatsReserved == thread->request->num_wanted_seats)
@@ -365,6 +393,7 @@ int processRequest(thread_t *thread)
       printf("-------------->reserved all seats\n");
       thread->answer->num_reserved_seats=numberOfSeatsReserved;
       thread->answer->reserved_seat_list=thread->request->pref_seat_list;
+      numberOfSeatsReserved = 0; 
       pthread_mutex_unlock(&(thread->seats[seatNum].mutex));
       return 0;
     }
@@ -372,18 +401,11 @@ int processRequest(thread_t *thread)
     pthread_mutex_unlock(&(thread->seats[seatNum].mutex));
   }
 
-   i = 0; 
-  //if the request failed, must free seats
-  for(; i < thread->request->num_pref_seats; i++){
-    int seatNum = thread->request->pref_seat_list[i];
-
-    pthread_mutex_lock(&(thread->seats[seatNum].mutex));
-
-    freeSeat(thread->seats, seatNum);
-
-    pthread_mutex_unlock(&(thread->seats[seatNum].mutex));
+  if(numberOfSeatsReserved != 0){
+    unbookSeats(thread);
   }
 
+  numberOfSeatsReserved = 0; 
   return 1;
 }
 
