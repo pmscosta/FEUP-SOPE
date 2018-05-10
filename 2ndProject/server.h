@@ -14,7 +14,7 @@ typedef struct{
     pthread_t tid;
     request_t *request;
     answer_t *answer;
-    Seat ** seats;
+    Seat *seats;
 
     int fdAnswer;
 } thread_t;
@@ -34,7 +34,7 @@ void displayAnswer(answer_t *answer);
 
 
 typedef struct{
-    Seat **room_seats;
+    Seat *room_seats;
     int num_room_seats;
     
     thread_t **ticket_offices;
@@ -42,9 +42,6 @@ typedef struct{
     int open_time;           //In seconds
 
     int fdRequest;
-    
-    //Possivelmente deve ficar memoria partilhada
-
 
 } server_t;
 

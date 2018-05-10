@@ -73,13 +73,12 @@ server_t *new_server(int num_room_seats, int num_ticket_offices, int open_time)
   g_num_room_seats = num_room_seats;
   server->open_time = open_time;
 
-  server->room_seats = (Seat **)malloc(server->num_room_seats * sizeof(Seat *));
+  server->room_seats = (Seat *)malloc(server->num_room_seats * sizeof(Seat));
   for (unsigned int i = 0; i < num_room_seats; i++)
   {
-    server->room_seats[i] = (Seat *)malloc(sizeof(Seat));
-    (server->room_seats[i])->reserved = false;
+    (server->room_seats[i]).reserved = false;
 
-    if (pthread_mutex_init(&(server->room_seats[i]->mutex), NULL) != 0)
+    if (pthread_mutex_init(&(server->room_seats[i].mutex), NULL) != 0)
     {
       fprintf(stderr, "Unable to init mutex\n");
       exit(5);
@@ -91,10 +90,6 @@ server_t *new_server(int num_room_seats, int num_ticket_offices, int open_time)
 
 void free_server(server_t *server)
 {
-  for (unsigned int i = 0; i < server->num_room_seats; i++)
-  {
-    free(server->room_seats[i]);
-  }
   free(server->room_seats);
 }
 
@@ -306,14 +301,13 @@ void validateRequestThread(thread_t *thread)
 
 int isSeatFree(Seat *seats, int seatNum)
 {
-
   return seats[seatNum].reserved != true;
 }
 void bookSeat(Seat *seats, int seatNum, int clientId)
 {
 
   seats[seatNum].reserved = true;
-  seats[clientId].clientID = clientId;
+  seats[seatNum].clientID = clientId;
 
   return;
 }
@@ -337,7 +331,7 @@ bool roomFull(Seat *seats)
 int processRequest(thread_t *thread)
 {
 
-  if (roomFull((*thread->seats)))
+  if (roomFull(thread->seats))
   {
     thread->answer->response_value = ROOM_FULL;
     return 1;
@@ -352,11 +346,11 @@ int processRequest(thread_t *thread)
 
     int seatNum = thread->request->pref_seat_list[i];
 
-    pthread_mutex_lock(&(thread->seats[seatNum]->mutex));
+    pthread_mutex_lock(&(thread->seats[seatNum].mutex));
 
-    if (isSeatFree((*thread->seats), seatNum))
+    if (isSeatFree(thread->seats, seatNum))
     {
-      bookSeat((*thread->seats), seatNum, 2);
+      bookSeat(thread->seats, seatNum, 2);
       numberOfSeatsReserved++;
     }
     else
@@ -371,11 +365,11 @@ int processRequest(thread_t *thread)
       printf("-------------->reserved all seats\n");
       thread->answer->num_reserved_seats=numberOfSeatsReserved;
       thread->answer->reserved_seat_list=thread->request->pref_seat_list;
-      pthread_mutex_unlock(&(thread->seats[seatNum]->mutex));
+      pthread_mutex_unlock(&(thread->seats[seatNum].mutex));
       return 0;
     }
 
-    pthread_mutex_unlock(&(thread->seats[seatNum]->mutex));
+    pthread_mutex_unlock(&(thread->seats[seatNum].mutex));
   }
 
    i = 0; 
@@ -383,11 +377,11 @@ int processRequest(thread_t *thread)
   for(; i < thread->request->num_pref_seats; i++){
     int seatNum = thread->request->pref_seat_list[i];
 
-    pthread_mutex_lock(&(thread->seats[seatNum]->mutex));
+    pthread_mutex_lock(&(thread->seats[seatNum].mutex));
 
-    freeSeat((*thread->seats), seatNum);
+    freeSeat(thread->seats, seatNum);
 
-    pthread_mutex_unlock(&(thread->seats[seatNum]->mutex));
+    pthread_mutex_unlock(&(thread->seats[seatNum].mutex));
   }
 
   return 1;
