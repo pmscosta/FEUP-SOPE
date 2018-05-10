@@ -12,8 +12,9 @@
 #include "server.h"
 
 pthread_mutex_t unit_buffer_mut = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t unit_buffer_cond = PTHREAD_COND_INITIALIZER;
-//pthread_cond_t thread_cond = PTHREAD_COND_INITIALIZER;
+pthread_cond_t thread_cond = PTHREAD_COND_INITIALIZER;
+pthread_cond_t server_cond = PTHREAD_COND_INITIALIZER;
+
 int unit_buffer_full = 0;
 int g_num_room_seats = 0;
 request_t request_buffer;
@@ -135,28 +136,28 @@ void readRequestServer(server_t *server)
     printf("Locking server\n");
     pthread_mutex_lock(&unit_buffer_mut);
     fprintf(stderr, "Lock in Server\n");
-    if ((n = read(server->fdRequest, &request_buffer, sizeof(request_t))) != -1 && unit_buffer_full == 0)
-    {
-      displayRequest(request_buffer);
-      pthread_mutex_unlock(&unit_buffer_mut);
-      fprintf(stderr, "Unlock Server\n");
 
-      unit_buffer_full = 1;
-      pthread_cond_signal(&unit_buffer_cond);
-      fprintf(stderr, "Send Condition Server\n");
-
-      close(server->fdRequest);
-      openRequestFifo(server);
-
-      continue;
+    while(unit_buffer_full == 1){
+      pthread_cond_wait(&thread_cond, &unit_buffer_mut);
     }
 
-    else
+    if ((n = read(server->fdRequest, &request_buffer, sizeof(request_t))) != -1)
     {
-      pthread_mutex_unlock(&unit_buffer_mut);
-      printf("Unlocked Server\n");
-      break;
+      if(n==0){
+        close(server->fdRequest);
+        openRequestFifo(server);
+      }
+      else{
+        displayRequest(request_buffer);
+
+        unit_buffer_full = 1;
+        pthread_cond_signal(&server_cond);
+        fprintf(stderr, "Send Condition Server\n");
+      }
     }
+      
+    pthread_mutex_unlock(&unit_buffer_mut);
+    printf("Unlock Server\n");
   }
 }
 
@@ -224,10 +225,10 @@ void readRequestThread(thread_t *thread)
   printf("Locked in thread\n");
 
   
-  while (unit_buffer_full != 1)
+  while (unit_buffer_full == 0)
   {
     fprintf(stderr, "Wait Condition Server\n");
-    pthread_cond_wait(&unit_buffer_cond, &unit_buffer_mut);
+    pthread_cond_wait(&server_cond, &unit_buffer_mut);
   } 
   printf("Critical\n");
 
@@ -235,7 +236,7 @@ void readRequestThread(thread_t *thread)
 
   unit_buffer_full = 0;
 
-  //pthread_cond_signal(&thread_cond);
+  pthread_cond_signal(&thread_cond);
   pthread_mutex_unlock(&unit_buffer_mut);
   printf("Unlocked in thread\n");
 }
