@@ -8,8 +8,13 @@
 #define CLIENT_BKS  "cbook.txt"
 #define SERVER_BKS  "sbook.txt"
 
+#define QUOTE(str) __QUOTE(str)
+#define __QUOTE(str)  #str
+
 #define WIDTH_PID   5
 #define WIDTH_XXNN  5
+#define WIDTH_XX    2
+#define WIDTH_NN    2
 #define WIDTH_SEAT  4
 
 #define MAX_ROOM_SEATS  9999 

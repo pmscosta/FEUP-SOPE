@@ -176,7 +176,9 @@ void writeLog(client_t *client)
 
   char *pid_msg = NULL;
 
-  int i = asprintf(&pid_msg, "%.5d", client->pid);
+  char * pid_fmt = "%." QUOTE(WIDTH_PID) "d";
+
+  int i = asprintf(&pid_msg, pid_fmt, client->pid);
 
   if (i == -1)
     badMessageAlloc();
@@ -243,14 +245,17 @@ void writeValidMessage(client_t *client, int fd, char *pid_msg)
 
   for (; j < client->answer->num_reserved_seats; j++)
   {
-    i = asprintf(&id, "%.2d.%.2d", (j + 1), client->answer->num_reserved_seats);
+    char * id_fmt =  "%." QUOTE(WIDTH_XX) "d.%." QUOTE(WIDTH_NN) "d";
+    i = asprintf(&id, id_fmt, (j + 1), client->answer->num_reserved_seats);
     if (i == -1)
       badMessageAlloc();
 
-    i = asprintf(&seat, "%.4d", client->answer->reserved_seat_list[j]);
+    char * seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+    i = asprintf(&seat, seat_fmt, client->answer->reserved_seat_list[j]);
     if (i == -1)
       badMessageAlloc();
 
+    
     i = asprintf(&final_msg, "%s %s %s\n", pid_msg, id, seat);
     if (i == -1)
       badMessageAlloc();
