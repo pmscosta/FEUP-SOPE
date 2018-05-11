@@ -166,7 +166,8 @@ void free_client(client_t *client)
 
 void writeLog(client_t *client)
 {
-  int fd = open(CLOG, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
+  int fd = open(CLIENT_LOG, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
+  int fd_book = open(CLIENT_BKS, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
 
   if (fd == -1)
   {
@@ -176,7 +177,7 @@ void writeLog(client_t *client)
 
   char *pid_msg = NULL;
 
-  char * pid_fmt = "%." QUOTE(WIDTH_PID) "d";
+  char *pid_fmt = "%." QUOTE(WIDTH_PID) "d";
 
   int i = asprintf(&pid_msg, pid_fmt, client->pid);
 
@@ -184,7 +185,7 @@ void writeLog(client_t *client)
     badMessageAlloc();
 
   if (client->answer->response_value == VALID_RESERVATION)
-    writeValidMessage(client, fd, pid_msg);
+    writeValidMessage(client, fd, pid_msg, fd_book);
   else
     writeInvalidMessage(client, fd, pid_msg);
 
@@ -235,7 +236,7 @@ void writeInvalidMessage(client_t *client, int fd, char *pid_msg)
   }
 }
 
-void writeValidMessage(client_t *client, int fd, char *pid_msg)
+void writeValidMessage(client_t *client, int fd, char *pid_msg,int fd_book)
 {
   char *id = NULL;
   char *seat = NULL;
@@ -245,17 +246,19 @@ void writeValidMessage(client_t *client, int fd, char *pid_msg)
 
   for (; j < client->answer->num_reserved_seats; j++)
   {
-    char * id_fmt =  "%." QUOTE(WIDTH_XX) "d.%." QUOTE(WIDTH_NN) "d";
+    char *id_fmt = "%." QUOTE(WIDTH_XX) "d.%." QUOTE(WIDTH_NN) "d";
     i = asprintf(&id, id_fmt, (j + 1), client->answer->num_reserved_seats);
     if (i == -1)
       badMessageAlloc();
 
-    char * seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+    char *seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
     i = asprintf(&seat, seat_fmt, client->answer->reserved_seat_list[j]);
     if (i == -1)
       badMessageAlloc();
 
-    
+    write(fd_book, seat, i);  
+    write(fd_book, "\n", 1);
+
     i = asprintf(&final_msg, "%s %s %s\n", pid_msg, id, seat);
     if (i == -1)
       badMessageAlloc();

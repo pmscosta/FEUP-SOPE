@@ -24,7 +24,6 @@
 
 #define REQ_FIFO    "requests"
 #define ANS_FIFO    "ans"
-#define CLOG        "clog.txt"
 
 #define VALID_RESERVATION        0
 
