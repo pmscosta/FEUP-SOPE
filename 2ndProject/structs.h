@@ -19,14 +19,29 @@
 
 #define REQ_FIFO    "requests"
 #define ANS_FIFO    "ans"
+#define CLOG        "clog.txt"
 
-#define VALID_RESERVATION       0
+#define VALID_RESERVATION        0
+
 #define INVALID_NUM_SEATS       -1
+#define MAX                     "MAX"
+
 #define INVALID_PREF_NUMBER     -2
+#define NST                     "NST"
+
 #define INVALID_SEATS_ID        -3
+#define IID                     "IID"
+
 #define INVALID_PARAMETHERS     -4
+#define ERR                     "ERR"
+
 #define UNAVALIABLE_SEAT        -5
+#define NAV                     "NAV"
+
 #define ROOM_FULL               -6
+#define FUL                     "FUL"
+
+#define OUT                     "OUT"
 
 typedef struct{
     int time_out;
@@ -41,7 +56,7 @@ typedef struct{
 typedef struct{
     int response_value;
     int num_reserved_seats;
-    int * reserved_seat_list;
+    int reserved_seat_list[MAX_CLI_SEATS];
 }answer_t;
 
 #endif
