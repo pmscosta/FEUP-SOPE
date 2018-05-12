@@ -45,6 +45,7 @@ void *thr_run(void *thr)
 
       printf("-------f------>invalid answer, return code = %d\n", thread->answer->response_value);
       sendFailedAnswer(thread);
+      writeLog(thread);
       resetThread(thread);
 
       //TODO continue or break?
@@ -55,6 +56,7 @@ void *thr_run(void *thr)
     fprintf(stderr, "Sending answer ...\n");
     sendAnswer(thread);
     displayAnswer(thread->answer);
+    writeLog(thread);
     resetThread(thread);
   }
 }
@@ -168,9 +170,11 @@ void readRequestServer(server_t *server)
 void createThreads(server_t *server)
 {
   server->ticket_offices = (thread_t **)malloc(server->num_room_seats * sizeof(thread_t *));
+
   for (unsigned int i = 0; i < server->num_ticket_offices; i++)
   {
-    server->ticket_offices[i] = new_thread();
+    server->ticket_offices[i] = new_thread(i+1, server->fd_slog);
+    logOpenClose(server->fd_sbook, i + 1, true);
     server->ticket_offices[i]->seats = server->room_seats;
   }
 }
@@ -190,15 +194,18 @@ void endThreads(server_t *server)
   {
     pthread_join((server->ticket_offices[i])->tid, NULL);
     free_thread(server->ticket_offices[i]);
+    logOpenClose(server->fd_sbook, i + 1, false);
   }
   free(server->ticket_offices);
 }
 
-thread_t *new_thread()
+thread_t *new_thread(int ticket_office_num, int slog)
 {
   thread_t *thread = (thread_t *)malloc(sizeof(thread_t));
   thread->request = (request_t *)malloc(sizeof(request_t));
   thread->answer = (answer_t *)malloc(sizeof(answer_t));
+  thread->ticket_office_num=ticket_office_num;
+  thread->fd_slog = slog;
   return thread;
 }
 
@@ -439,6 +446,234 @@ void sendFailedAnswer(thread_t *thread)
   }
 }
 
+// void writeLog(client_t *client)
+// {
+//   int fd = open(CLIENT_LOG, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
+//   int fd_book = open(CLIENT_BKS, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
+
+//   if (fd == -1)
+//   {
+//     fprintf(stderr, "Unable to create or open clog file\n");
+//     exit(6);
+//   }
+
+//   char *pid_msg = NULL;
+
+//   char *pid_fmt = "%." QUOTE(WIDTH_PID) "d";
+
+//   int i = asprintf(&pid_msg, pid_fmt, client->pid);
+
+//   if (i == -1)
+//     badMessageAlloc();
+
+//   if (client->answer->response_value == VALID_RESERVATION)
+//     writeValidMessage(client, fd, pid_msg, fd_book);
+//   else
+//     writeInvalidMessage(client, fd, pid_msg);
+
+//   close(fd);
+//   free(pid_msg);
+// }
+
+void badMessageAlloc()
+{
+  fprintf(stderr, "Unable to allocate memory for clog output\n");
+  exit(7);
+}
+
+void logOpenClose(int fd_slog, int ticket_office_num, bool toOpen)
+{
+
+  char *openMessage = NULL;
+  char *finalMessage = NULL;
+  int i = 0;
+
+  char *msg_fmt = "%." QUOTE(WIDTH_TICKET_OFFICES) "d";
+  i = asprintf(&openMessage, msg_fmt, ticket_office_num);
+  if (i == -1)
+    badMessageAlloc();
+
+  if (toOpen)
+    i = asprintf(&finalMessage, "%s-OPEN", openMessage);
+  else
+    i = asprintf(&finalMessage, "%s-CLOSED", openMessage);
+
+  write(fd_slog, finalMessage, i);
+  write(fd_slog, "\n", 1);
+
+  free(openMessage);
+  free(finalMessage);
+}
+
+void openLogs(server_t *server)
+{
+  server->fd_sbook = open(SERVER_BKS, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
+  
+  if(server->fd_sbook == -1){
+    fprintf(stderr, "Unable to create or open sbook file\n");
+    exit(6);
+  }
+
+  server->fd_slog = open(SERVER_LOG, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
+  if(server->fd_slog == -1){
+    fprintf(stderr, "Unable to create or open fd_slog file\n");
+    exit(6);
+  }
+}
+
+void writeToBook(server_t *server)
+{
+  char * seat;
+  char *seat_fmt;
+  for (int i = 1; i <= g_num_room_seats; i++)
+  {
+    if (server->room_seats[i].reserved == true)
+    {
+      seat = NULL;
+      seat_fmt=NULL;
+      seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+      i = asprintf(&seat, seat_fmt, server->room_seats[i].clientID);
+      if (i == -1)
+        badMessageAlloc();
+
+      write(server->fd_sbook, seat, i);
+      write(server->fd_sbook, "\n", 1);
+
+    }
+  }
+  free(seat);
+  free(seat_fmt);
+}
+
+void closeLogs(server_t *server)
+{
+  write(server->fd_slog, "SERVER CLOSED", 13);
+  writeToBook(server);
+  close(server->fd_sbook);
+  close(server->fd_slog);
+}
+
+void logReservedSeats(thread_t * thread){
+  char * seat_fmt=NULL;
+  char * final_msg = NULL;
+  char * seat = NULL;
+  int i = 0;
+  for (int j = 0; j < thread->answer->num_reserved_seats; j++)
+  {
+    seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+    i = asprintf(&seat, seat_fmt, thread->answer->reserved_seat_list[j]);
+    if (i == -1)
+      badMessageAlloc();
+
+    i = asprintf(&final_msg, " %s",seat);
+    if (i == -1)
+      badMessageAlloc();
+
+    write(thread->fd_slog,final_msg,i);
+    free(seat);
+    free(final_msg);
+  }
+}
+
+void writeLog(thread_t * thread)
+{
+
+  //ID-Thread
+  char * idThread=NULL;
+  char * idThread_fmt = "%." QUOTE(WIDTH_TICKET_OFFICES) "d";
+  int i = asprintf(&idThread, idThread_fmt, thread->ticket_office_num);
+
+  if(i== -1)
+    badMessageAlloc();
+  
+  //ID-Client
+  char * idClient =NULL;
+  char * idClient_fmt = "%." QUOTE(WIDTH_PID) "d";
+  i = asprintf(&idClient, idClient_fmt, thread->request->pid);
+
+  if(i== -1)
+    badMessageAlloc();
+  
+  //Number of wanted seats 
+  char * numSeats =NULL;
+  char * numSeats_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+  i = asprintf(&numSeats, numSeats_fmt, thread->request->num_wanted_seats);
+
+  if(i== -1)
+    badMessageAlloc(); 
+
+  char *final_msg = NULL;
+  i = asprintf(&final_msg, "%s-%s-%s:",idThread , idClient, numSeats);
+  if (i == -1)
+    badMessageAlloc();
+
+  write(thread->fd_slog, final_msg,i);
+  free(idThread);
+  free(idClient);
+  free(numSeats);
+  free(final_msg);
+
+
+  char * seat=NULL;
+  char * seat_fmt =NULL;
+  for (int j = 0; j < thread->request->num_pref_seats; j++)
+  {
+    if(thread->request->pref_seat_list[j] <1 ||thread->request->pref_seat_list[j]>g_num_room_seats) continue;
+    seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+    i = asprintf(&seat, seat_fmt, thread->request->pref_seat_list[j]);
+    if (i == -1)
+      badMessageAlloc();
+
+    i = asprintf(&final_msg, " %s",seat);
+    if (i == -1)
+      badMessageAlloc();
+
+    write(thread->fd_slog,final_msg,i);
+    free(seat);
+    free(final_msg);
+  }
+
+  char *reason = NULL;
+
+  switch (thread->answer->response_value)
+  {
+  case INVALID_NUM_SEATS:
+    reason = MAX;
+    break;
+  case INVALID_PREF_NUMBER:
+    reason = NST;
+    break;
+  case INVALID_SEATS_ID:
+    reason = IID;
+    break;
+  case INVALID_PARAMETHERS:
+    reason = ERR;
+    break;
+  case UNAVALIABLE_SEAT:
+    reason = NAV;
+    break;
+  case ROOM_FULL:
+    reason = FUL;
+    break;
+  default:
+    break;
+  }
+
+  write(thread->fd_slog," -",2);
+   if (reason != NULL)
+  {
+    i= asprintf(&final_msg," %s", reason);
+
+    if (i == -1)
+      badMessageAlloc();
+
+    write(thread->fd_slog, final_msg, i);
+    free(final_msg);
+  } else logReservedSeats(thread);
+
+  write(thread->fd_slog,"\n",1);
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -449,6 +684,7 @@ int main(int argc, char *argv[])
   server_t *server = new_server(num_room_seats, num_ticket_offices, open_time);
   createRequestFifo(server);
   openRequestFifo(server);
+  openLogs(server);
   createThreads(server);
   runThreads(server);
 
@@ -456,6 +692,7 @@ int main(int argc, char *argv[])
   readRequestServer(server);
   printf("Terminating ... \n");
   endThreads(server);
+  closeLogs(server);
   free_server(server);
 
   return 0;

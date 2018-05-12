@@ -244,14 +244,16 @@ void writeValidMessage(client_t *client, int fd, char *pid_msg,int fd_book)
   int j = 0;
   int i = 0;
 
+  char *seat_fmt =NULL;
+  char *id_fmt =NULL;
   for (; j < client->answer->num_reserved_seats; j++)
   {
-    char *id_fmt = "%." QUOTE(WIDTH_XX) "d.%." QUOTE(WIDTH_NN) "d";
+    id_fmt = "%." QUOTE(WIDTH_XX) "d.%." QUOTE(WIDTH_NN) "d";
     i = asprintf(&id, id_fmt, (j + 1), client->answer->num_reserved_seats);
     if (i == -1)
       badMessageAlloc();
 
-    char *seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+    seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
     i = asprintf(&seat, seat_fmt, client->answer->reserved_seat_list[j]);
     if (i == -1)
       badMessageAlloc();
@@ -290,6 +292,11 @@ int main(int argc, char *argv[])
   int pref_number = 0;
 
   pch = strtok(pref_list, " ");
+
+  if(pch==NULL){
+      fprintf(stderr, "Error on preffered seat list\n");
+      exit(1);
+  }
 
   while (pch != NULL)
   {

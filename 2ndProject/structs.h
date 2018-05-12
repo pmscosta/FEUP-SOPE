@@ -16,6 +16,7 @@
 #define WIDTH_XX    2
 #define WIDTH_NN    2
 #define WIDTH_SEAT  4
+#define WIDTH_TICKET_OFFICES    2
 
 #define MAX_ROOM_SEATS  9999 
 #define MAX_CLI_SEATS   99
