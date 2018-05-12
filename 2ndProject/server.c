@@ -446,35 +446,6 @@ void sendFailedAnswer(thread_t *thread)
   }
 }
 
-// void writeLog(client_t *client)
-// {
-//   int fd = open(CLIENT_LOG, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
-//   int fd_book = open(CLIENT_BKS, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
-
-//   if (fd == -1)
-//   {
-//     fprintf(stderr, "Unable to create or open clog file\n");
-//     exit(6);
-//   }
-
-//   char *pid_msg = NULL;
-
-//   char *pid_fmt = "%." QUOTE(WIDTH_PID) "d";
-
-//   int i = asprintf(&pid_msg, pid_fmt, client->pid);
-
-//   if (i == -1)
-//     badMessageAlloc();
-
-//   if (client->answer->response_value == VALID_RESERVATION)
-//     writeValidMessage(client, fd, pid_msg, fd_book);
-//   else
-//     writeInvalidMessage(client, fd, pid_msg);
-
-//   close(fd);
-//   free(pid_msg);
-// }
-
 void badMessageAlloc()
 {
   fprintf(stderr, "Unable to allocate memory for clog output\n");
