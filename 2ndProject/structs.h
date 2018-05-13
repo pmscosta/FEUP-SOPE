@@ -1,7 +1,7 @@
 #ifndef _STRUCTS_H_
 #define _STRUCTS_H_
 
-#define DELAY(n) sleep(n)
+#define DELAY(n) usleep(n)
 
 #define CLIENT_LOG  "clog.txt"
 #define SERVER_LOG  "slog.txt"
