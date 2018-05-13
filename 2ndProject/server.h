@@ -164,7 +164,7 @@ Creates the fifo through where the request will be received
 void createRequestFifo(server_t *server);
 
 /*
-Opens the created request fifo, waiting for request to be sent.
+Opens the created request fifo
 @param server - the current server
 */
 void openRequestFifo(server_t *server);

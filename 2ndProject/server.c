@@ -170,7 +170,6 @@ void openRequestFifo(server_t *server)
 void displayRequest(request_t req)
 {
   printf("\n\n-----------------_MESSAGE INFO------------------\n");
-  printf("time_out %d \n", req.time_out);
   printf("num_wanted_seats %d \n", req.num_wanted_seats);
   printf("num_pref_seats %d \n", req.num_pref_seats);
   printf("fifo name %s \n", req.answer_fifo_name);

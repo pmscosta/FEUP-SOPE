@@ -49,20 +49,25 @@
 
 #define OUT                     "OUT"
 
+
+/*
+Struct that represent a client's request.
+*/
 typedef struct{
-    int time_out;
-    int num_wanted_seats;
-    int num_pref_seats;
-    int pid;
-    int pref_seat_list[MAX_CLI_SEATS];
-    char answer_fifo_name[MAX_ANS_FIFO];
+    int num_wanted_seats;  //the total number of wanted seats
+    int num_pref_seats;     //the total number of preffered seats
+    int pid;                //the client's calling process pid
+    int pref_seat_list[MAX_CLI_SEATS]; //an array containing the preffered seats
+    char answer_fifo_name[MAX_ANS_FIFO]; //a string containing the answer's fifo name
 }request_t;
 
-
+/*
+Struct that represents a server's response
+*/
 typedef struct{
-    int response_value;
-    int num_reserved_seats;
-    int reserved_seat_list[MAX_CLI_SEATS];
+    int response_value; //the response value
+    int num_reserved_seats; //the effective number of reserved seats
+    int reserved_seat_list[MAX_CLI_SEATS]; //the list of the reserved seats
 }answer_t;
 
 #endif

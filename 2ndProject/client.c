@@ -71,11 +71,10 @@ client_t *new_client()
   return client;
 }
 
-void createRequest(client_t *client, int time_out, int num_wanted_seats, int num_pref_seats, int *pref_seat_list)
+void createRequest(client_t *client, int num_wanted_seats, int num_pref_seats, int *pref_seat_list)
 {
   request_t *req = client->request;
 
-  req->time_out = time_out;
   req->num_wanted_seats = num_wanted_seats;
   req->num_pref_seats = num_pref_seats;
   req->pid = (int)client->pid;
@@ -381,7 +380,7 @@ int main(int argc, char *argv[])
   sigalarm_clean(client);
 
   createAnswerFifo(client);
-  createRequest(client, time_out, num_wanted_seats, pref_number, pref_seat_list);
+  createRequest(client, num_wanted_seats, pref_number, pref_seat_list);
   openRequestFifo(client);
   printf("Sending request ...\n");
   sendRequest(client);
