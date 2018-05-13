@@ -367,19 +367,20 @@ void validateRequestThread(thread_t *thread)
 
 int isSeatFree(Seat *seats, int seatNum)
 {
+  DELAY(DELAY_TIME);
   return seats[seatNum].reserved != true;
 }
+
 void bookSeat(Seat *seats, int seatNum, int clientId)
 {
-
+  DELAY(DELAY_TIME);
   seats[seatNum].reserved = true;
   seats[seatNum].clientID = clientId;
-
-  return;
 }
+
 void freeSeat(Seat *seats, int seatNum)
 {
-  printf("-------------------------------------------------------------->Freeing seat number %d\n", seatNum);
+  DELAY(DELAY_TIME);
   seats[seatNum].reserved = false;
   seats[seatNum].clientID = 0;
 }
@@ -436,8 +437,6 @@ int processRequest(thread_t *thread)
 
     pthread_mutex_lock(&(thread->seats[seatNum].mutex));
     
-    DELAY(1000);
-    
     printf("Trying to reserve seat: %d\n", seatNum);
 
     if (isSeatFree(thread->seats, seatNum))
@@ -485,6 +484,8 @@ void sendAnswer(thread_t *thread)
     printf("error writing answer\n");
     exit(4);
   }
+
+  close(thread->fdAnswer);
 }
 
 void sendFailedAnswer(thread_t *thread)
@@ -498,6 +499,7 @@ void sendFailedAnswer(thread_t *thread)
     printf("error writing answer\n");
     exit(4);
   }
+  close(thread->fdAnswer);
 }
 
 void badMessageAlloc()

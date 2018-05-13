@@ -2,6 +2,7 @@
 #define _STRUCTS_H_
 
 #define DELAY(n) usleep(n)
+#define DELAY_TIME 1000
 
 #define CLIENT_LOG  "clog.txt"
 #define SERVER_LOG  "slog.txt"
