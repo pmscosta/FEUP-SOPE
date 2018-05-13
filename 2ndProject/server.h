@@ -45,7 +45,6 @@ typedef struct{
     int open_time;           //In seconds
 
     int fdRequest;
-
     int fd_sbook;
     int fd_slog;
 
@@ -61,12 +60,13 @@ void readRequestServer(server_t *server);
 
 void createThreads(server_t *server);
 void runThreads(server_t *server);
+void cancelThreads(server_t *server);
 void endThreads(server_t *server);
 
 void logOpenClose(int fd_slog, int ticket_office_num, bool toOpen);
 void writeToBook(server_t * server);
 void writeLog(thread_t * thread);
 void logReservedSeats(thread_t * thread);
-
+void closeLogs(server_t *server);
 
 #endif

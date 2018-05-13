@@ -1,34 +1,55 @@
 #define _GNU_SOURCE
 #include <unistd.h>
 #include <stdio.h>
-#include <sys/types.h>
 #include <stdlib.h>
-#include <pthread.h>
-#include <stdio.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <stdbool.h>
-#include <sys/wait.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <unistd.h>
 #include <string.h>
 #include <time.h>
 #include "client.h"
 
 bool receivedMessage = false;
 
-client_t *client;
+
+
+void sigalarm_clean(client_t *data)
+{
+    static client_t *sClient;
+    if (data) {
+        sClient = data;
+    } else {
+        free_client(sClient);
+    }
+}
+
+void sigalarm_handler(int signo)
+{
+  fprintf(stderr, "Received alarm\n");
+  sigalarm_clean(NULL);
+  fprintf(stderr, "Exiting...\n");
+  exit(1);
+}
+
+void sigalarm_install(){
+  struct sigaction sa;
+
+  sa.sa_handler = sigalarm_handler;
+  sa.sa_flags = 0;
+  sigemptyset(&sa.sa_mask);
+
+  if (sigaction(SIGALRM, &sa, NULL) == -1)
+  {
+    fprintf(stderr, "Unable to install handler\n");
+    exit(1);
+  }
+}
 
 void badMessageAlloc()
 {
   fprintf(stderr, "Unable to allocate memory for clog output\n");
   exit(7);
-}
-
-void sigalarm_handler(int signo)
-{
-  printf("hello\n");
 }
 
 client_t *new_client()
@@ -46,7 +67,6 @@ client_t *new_client()
 
 void createRequest(client_t *client, int time_out, int num_wanted_seats, int num_pref_seats, int *pref_seat_list)
 {
-
   request_t *req = client->request;
 
   req->time_out = time_out;
@@ -244,16 +264,15 @@ void writeValidMessage(client_t *client, int fd, char *pid_msg,int fd_book)
   int j = 0;
   int i = 0;
 
-  char *seat_fmt =NULL;
-  char *id_fmt =NULL;
+  char *seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+  char *id_fmt = "%." QUOTE(WIDTH_XX) "d.%." QUOTE(WIDTH_NN) "d";
+  
   for (; j < client->answer->num_reserved_seats; j++)
   {
-    id_fmt = "%." QUOTE(WIDTH_XX) "d.%." QUOTE(WIDTH_NN) "d";
     i = asprintf(&id, id_fmt, (j + 1), client->answer->num_reserved_seats);
     if (i == -1)
       badMessageAlloc();
 
-    seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
     i = asprintf(&seat, seat_fmt, client->answer->reserved_seat_list[j]);
     if (i == -1)
       badMessageAlloc();
@@ -272,22 +291,9 @@ void writeValidMessage(client_t *client, int fd, char *pid_msg,int fd_book)
   }
 }
 
-int main(int argc, char *argv[])
-{
-
-  //TODO: Testar possiveis erros;
-  if (argc != 4)
-  {
-    printf("Usage: %s <time_out> <num_wanted_seats> <pref_seat_list>\n", argv[0]);
-    exit(1);
-  }
-
-  int time_out = atoi(argv[1]);
-  int num_wanted_seats = atoi(argv[2]);
-  char *pref_list = argv[3];
+int string_to_array(char * pref_list, int ** pref_seat_list){
+  
   char *pch;
-
-  int *pref_seat_list = NULL;
   int *new_pos;
   int pref_number = 0;
 
@@ -301,12 +307,12 @@ int main(int argc, char *argv[])
   while (pch != NULL)
   {
     pref_number++;
-    new_pos = (int *)realloc(pref_seat_list, pref_number * sizeof(int));
+    new_pos = (int *)realloc(*pref_seat_list, pref_number * sizeof(int));
 
     if (new_pos != NULL)
     {
-      pref_seat_list = new_pos;
-      pref_seat_list[pref_number - 1] = atoi(pch);
+      *pref_seat_list = new_pos;
+      (*pref_seat_list)[pref_number - 1] = atoi(pch);
     }
     else
     {
@@ -317,19 +323,30 @@ int main(int argc, char *argv[])
     pch = strtok(NULL, " ");
   }
 
-  struct sigaction sa;
+  return pref_number;
+}
 
-  sa.sa_handler = sigalarm_handler;
-  sa.sa_flags = 0;
-  sigemptyset(&sa.sa_mask);
+int main(int argc, char *argv[])
+{
 
-  if (sigaction(SIGALRM, &sa, NULL) == -1)
+  //TODO: Testar possiveis erros;
+  if (argc != 4)
   {
-    fprintf(stderr, "Unable to install handler\n");
+    printf("Usage: %s <time_out> <num_wanted_seats> <pref_seat_list>\n", argv[0]);
     exit(1);
   }
 
-  client = new_client();
+  int time_out = atoi(argv[1]);
+  int num_wanted_seats = atoi(argv[2]);
+  int *pref_seat_list = NULL;
+  int pref_number = string_to_array(argv[3], &pref_seat_list);
+
+
+
+  client_t * client = new_client();
+  
+  sigalarm_install();
+  sigalarm_clean(client);
 
   createAnswerFifo(client);
   createRequest(client, time_out, num_wanted_seats, pref_number, pref_seat_list);
@@ -337,7 +354,7 @@ int main(int argc, char *argv[])
   printf("Sending request ...\n");
   sendRequest(client);
   //-----starting timer-----
-  ualarm(time_out * 1000, 0);
+  ualarm(time_out*1000, 0);
   //------------------------
   printf("Close request ...\n");
   close(client->fdRequest);
@@ -345,6 +362,7 @@ int main(int argc, char *argv[])
   openAnswerFifo(client);
   printf("Reading answer from fifo ...\n");
   readAnswer(client);
+  printf("Read answer from fifo ...\n");
   displayAnswer(client->answer);
   writeLog(client);
   printf("Exit...\n");

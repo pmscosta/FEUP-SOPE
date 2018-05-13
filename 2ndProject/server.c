@@ -4,11 +4,11 @@
 #include <sys/types.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include <stdio.h>
-#include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <string.h>
+#include <signal.h>
+#include <time.h>
 #include "server.h"
 
 pthread_mutex_t unit_buffer_mut = PTHREAD_MUTEX_INITIALIZER;
@@ -18,6 +18,41 @@ pthread_cond_t server_cond = PTHREAD_COND_INITIALIZER;
 int unit_buffer_full = 0;
 int g_num_room_seats = 0;
 request_t request_buffer;
+
+void sigalarm_clean(server_t *data)
+{
+    static server_t *sServer;
+    if (data) {
+        sServer = data;
+    } else {
+        cancelThreads(sServer);
+        closeLogs(sServer);
+        free_server(sServer);
+    }
+}
+
+void sigalarm_handler(int signo)
+{
+  fprintf(stderr, "Received alarm\n");
+  sigalarm_clean(NULL);
+  fprintf(stderr, "Exiting...\n");
+  exit(1);
+}
+
+void sigalarm_install(){
+  struct sigaction sa;
+
+  sa.sa_handler = sigalarm_handler;
+  sa.sa_flags = 0;
+  sigemptyset(&sa.sa_mask);
+
+  if (sigaction(SIGALRM, &sa, NULL) == -1)
+  {
+    fprintf(stderr, "Unable to install handler\n");
+    exit(1);
+  }
+}
+
 
 void displayAnswer(answer_t *answer)
 {
@@ -96,7 +131,16 @@ server_t *new_server(int num_room_seats, int num_ticket_offices, int open_time)
 
 void free_server(server_t *server)
 {
+  free(server->ticket_offices);
   free(server->room_seats);
+  close(server->fdRequest);
+  close(server->fd_sbook);
+  close(server->fd_slog);
+  
+  if (unlink(REQ_FIFO) == -1)
+  {
+    perror("Error");
+  }
 }
 
 void createRequestFifo(server_t *server)
@@ -174,7 +218,7 @@ void createThreads(server_t *server)
   for (unsigned int i = 0; i < server->num_ticket_offices; i++)
   {
     server->ticket_offices[i] = new_thread(i+1, server->fd_slog);
-    logOpenClose(server->fd_sbook, i + 1, true);
+    logOpenClose(server->fd_slog, i + 1, true);
     server->ticket_offices[i]->seats = server->room_seats;
   }
 }
@@ -189,14 +233,22 @@ void runThreads(server_t *server)
 
 void endThreads(server_t *server)
 {
-
   for (unsigned int i = 0; i < server->num_ticket_offices; i++)
   {
     pthread_join((server->ticket_offices[i])->tid, NULL);
     free_thread(server->ticket_offices[i]);
-    logOpenClose(server->fd_sbook, i + 1, false);
+    logOpenClose(server->fd_slog, i + 1, false);
   }
-  free(server->ticket_offices);
+}
+
+void cancelThreads(server_t *server)
+{
+  for (unsigned int i = 0; i < server->num_ticket_offices; i++)
+  {
+    pthread_cancel((server->ticket_offices[i])->tid);
+    free_thread(server->ticket_offices[i]);
+    logOpenClose(server->fd_slog, i + 1, false);
+  }
 }
 
 thread_t *new_thread(int ticket_office_num, int slog)
@@ -383,7 +435,9 @@ int processRequest(thread_t *thread)
     int seatNum = thread->request->pref_seat_list[i] - 1;
 
     pthread_mutex_lock(&(thread->seats[seatNum].mutex));
-
+    
+    DELAY(1000);
+    
     printf("Trying to reserve seat: %d\n", seatNum);
 
     if (isSeatFree(thread->seats, seatNum))
@@ -457,19 +511,20 @@ void logOpenClose(int fd_slog, int ticket_office_num, bool toOpen)
 
   char *openMessage = NULL;
   char *finalMessage = NULL;
-  int i = 0;
+  int nr = 0;
 
   char *msg_fmt = "%." QUOTE(WIDTH_TICKET_OFFICES) "d";
-  i = asprintf(&openMessage, msg_fmt, ticket_office_num);
-  if (i == -1)
+
+  nr = asprintf(&openMessage, msg_fmt, ticket_office_num);
+  if (nr == -1)
     badMessageAlloc();
 
   if (toOpen)
-    i = asprintf(&finalMessage, "%s-OPEN", openMessage);
+    nr = asprintf(&finalMessage, "%s-OPEN", openMessage);
   else
-    i = asprintf(&finalMessage, "%s-CLOSED", openMessage);
+    nr = asprintf(&finalMessage, "%s-CLOSED", openMessage);
 
-  write(fd_slog, finalMessage, i);
+  write(fd_slog, finalMessage, nr);
   write(fd_slog, "\n", 1);
 
   free(openMessage);
@@ -495,25 +550,24 @@ void openLogs(server_t *server)
 void writeToBook(server_t *server)
 {
   char * seat;
-  char *seat_fmt;
-  for (int i = 1; i <= g_num_room_seats; i++)
+  
+  char *seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+
+  for (int i = 0; i < g_num_room_seats; i++)
   {
+
     if (server->room_seats[i].reserved == true)
     {
       seat = NULL;
-      seat_fmt=NULL;
-      seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
-      i = asprintf(&seat, seat_fmt, server->room_seats[i].clientID);
-      if (i == -1)
+      int nr = asprintf(&seat, seat_fmt, i + 1);
+      if (nr == -1)
         badMessageAlloc();
 
-      write(server->fd_sbook, seat, i);
+      write(server->fd_sbook, seat, nr);
       write(server->fd_sbook, "\n", 1);
-
     }
   }
   free(seat);
-  free(seat_fmt);
 }
 
 void closeLogs(server_t *server)
@@ -525,13 +579,15 @@ void closeLogs(server_t *server)
 }
 
 void logReservedSeats(thread_t * thread){
-  char * seat_fmt=NULL;
+
+  char * seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
   char * final_msg = NULL;
   char * seat = NULL;
+  
   int i = 0;
+  
   for (int j = 0; j < thread->answer->num_reserved_seats; j++)
   {
-    seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
     i = asprintf(&seat, seat_fmt, thread->answer->reserved_seat_list[j]);
     if (i == -1)
       badMessageAlloc();
@@ -586,11 +642,11 @@ void writeLog(thread_t * thread)
 
 
   char * seat=NULL;
-  char * seat_fmt =NULL;
+  char * seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
   for (int j = 0; j < thread->request->num_pref_seats; j++)
   {
     if(thread->request->pref_seat_list[j] <1 ||thread->request->pref_seat_list[j]>g_num_room_seats) continue;
-    seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+
     i = asprintf(&seat, seat_fmt, thread->request->pref_seat_list[j]);
     if (i == -1)
       badMessageAlloc();
@@ -648,23 +704,35 @@ void writeLog(thread_t * thread)
 int main(int argc, char *argv[])
 {
 
+  if (argc != 4)
+  {
+    printf("Usage: %s <num_room_seats> <num_ticket_offices> <open_time>\n", argv[0]);
+    exit(1);
+  }
+
   int num_room_seats = atoi(argv[1]);
   int num_ticket_offices = atoi(argv[2]);
   int open_time = atoi(argv[3]);
 
+
+
   server_t *server = new_server(num_room_seats, num_ticket_offices, open_time);
+ 
+  sigalarm_install();
+  sigalarm_clean(server);
+
   createRequestFifo(server);
   openRequestFifo(server);
   openLogs(server);
   createThreads(server);
+  
+  alarm(open_time);
+  
   runThreads(server);
-
-  //TODO: Usar variaveis de condicao para evitar busy waiting
   readRequestServer(server);
-  printf("Terminating ... \n");
+
   endThreads(server);
   closeLogs(server);
   free_server(server);
-
   return 0;
 }
