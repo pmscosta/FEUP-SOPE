@@ -137,8 +137,6 @@ void free_server(server_t *server)
   free(server->ticket_offices);
   free(server->room_seats);
   close(server->fdRequest);
-  close(server->fd_sbook);
-  close(server->fd_slog);
 
   if (unlink(REQ_FIFO) == -1)
   {
