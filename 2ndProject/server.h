@@ -16,15 +16,16 @@ typedef struct{
     answer_t *answer;
     Seat *seats;
     int ticket_office_num;
-    int fd_slog;
 
     int fdAnswer;
+
+    FILE * fd_sl;
 } thread_t;
 
-thread_t * new_thread(int ticket_office_num, int slog);
+thread_t * new_thread(int ticket_office_num, FILE * slog);
 void free_thread(thread_t *thread);
 
-void openAnswerFifo(thread_t *thread);
+int openAnswerFifo(thread_t *thread);
 void readRequestThread(thread_t *thread);
 void validateRequestThread(thread_t * thread);
 int processRequest(thread_t * thread);
@@ -45,8 +46,9 @@ typedef struct{
     int open_time;           //In seconds
 
     int fdRequest;
-    int fd_sbook;
-    int fd_slog;
+
+    FILE * fd_sb; 
+    FILE * fd_sl;
 
 } server_t;
 
@@ -63,7 +65,7 @@ void runThreads(server_t *server);
 void cancelThreads(server_t *server);
 void endThreads(server_t *server);
 
-void logOpenClose(int fd_slog, int ticket_office_num, bool toOpen);
+void logOpenClose(FILE * fd_slog, int ticket_office_num, bool toOpen);
 void writeToBook(server_t * server);
 void writeLog(thread_t * thread);
 void logReservedSeats(thread_t * thread);

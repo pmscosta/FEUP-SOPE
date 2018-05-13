@@ -134,8 +134,10 @@ void free_server(server_t *server)
   free(server->ticket_offices);
   free(server->room_seats);
   close(server->fdRequest);
-  close(server->fd_sbook);
-  close(server->fd_slog);
+  //close(server->fd_sbook);
+  fclose(server->fd_sb);
+  //close(server->fd_slog);
+  fclose(server->fd_sl);
   
   if (unlink(REQ_FIFO) == -1)
   {
@@ -217,8 +219,9 @@ void createThreads(server_t *server)
 
   for (unsigned int i = 0; i < server->num_ticket_offices; i++)
   {
-    server->ticket_offices[i] = new_thread(i+1, server->fd_slog);
-    logOpenClose(server->fd_slog, i + 1, true);
+    server->ticket_offices[i] = new_thread(i+1, server->fd_sl);
+    server->ticket_offices[i]->fd_sl = server->fd_sl;
+    logOpenClose(server->fd_sl, i + 1, true);
     server->ticket_offices[i]->seats = server->room_seats;
   }
 }
@@ -237,7 +240,7 @@ void endThreads(server_t *server)
   {
     pthread_join((server->ticket_offices[i])->tid, NULL);
     free_thread(server->ticket_offices[i]);
-    logOpenClose(server->fd_slog, i + 1, false);
+    logOpenClose(server->fd_sl, i + 1, false);
   }
 }
 
@@ -247,17 +250,17 @@ void cancelThreads(server_t *server)
   {
     pthread_cancel((server->ticket_offices[i])->tid);
     free_thread(server->ticket_offices[i]);
-    logOpenClose(server->fd_slog, i + 1, false);
+    logOpenClose(server->fd_sl, i + 1, false);
   }
 }
 
-thread_t *new_thread(int ticket_office_num, int slog)
+thread_t *new_thread(int ticket_office_num, FILE * slog)
 {
   thread_t *thread = (thread_t *)malloc(sizeof(thread_t));
   thread->request = (request_t *)malloc(sizeof(request_t));
   thread->answer = (answer_t *)malloc(sizeof(answer_t));
   thread->ticket_office_num=ticket_office_num;
-  thread->fd_slog = slog;
+  thread->fd_sl = slog;
   return thread;
 }
 
@@ -268,16 +271,18 @@ void free_thread(thread_t *thread)
   free(thread);
 }
 
-void openAnswerFifo(thread_t *thread)
+int openAnswerFifo(thread_t *thread)
 {
   int fd_ans = open(thread->request->answer_fifo_name, O_WRONLY);
 
   if (fd_ans == -1)
   {
     fprintf(stderr, "Unable to open answer fifo\n");
-    exit(3);
+    return -1;
   }
   thread->fdAnswer = fd_ans;
+
+  return 0;
 }
 
 void readRequestThread(thread_t *thread)
@@ -478,7 +483,11 @@ void sendAnswer(thread_t *thread)
 {
 
   printf("Opening answer fifo ...\n");
-  openAnswerFifo(thread);
+  int result  = openAnswerFifo(thread);
+
+  if(result == -1){
+    return;
+  }
 
   if (write(thread->fdAnswer, thread->answer, sizeof(answer_t)) == -1)
   {
@@ -489,7 +498,11 @@ void sendAnswer(thread_t *thread)
 
 void sendFailedAnswer(thread_t *thread)
 {
-  openAnswerFifo(thread);
+  int result = openAnswerFifo(thread);
+
+  if(result == -1){
+    return;
+  }
 
   thread->answer->num_reserved_seats = 0;
 
@@ -506,7 +519,7 @@ void badMessageAlloc()
   exit(7);
 }
 
-void logOpenClose(int fd_slog, int ticket_office_num, bool toOpen)
+void logOpenClose(FILE * fd_slog, int ticket_office_num, bool toOpen)
 {
 
   char *openMessage = NULL;
@@ -524,8 +537,8 @@ void logOpenClose(int fd_slog, int ticket_office_num, bool toOpen)
   else
     nr = asprintf(&finalMessage, "%s-CLOSED", openMessage);
 
-  write(fd_slog, finalMessage, nr);
-  write(fd_slog, "\n", 1);
+  fwrite(finalMessage, nr, 1, fd_slog);
+  fwrite("\n", 1, 1, fd_slog);
 
   free(openMessage);
   free(finalMessage);
@@ -533,18 +546,10 @@ void logOpenClose(int fd_slog, int ticket_office_num, bool toOpen)
 
 void openLogs(server_t *server)
 {
-  server->fd_sbook = open(SERVER_BKS, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
-  
-  if(server->fd_sbook == -1){
-    fprintf(stderr, "Unable to create or open sbook file\n");
-    exit(6);
-  }
 
-  server->fd_slog = open(SERVER_LOG, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
-  if(server->fd_slog == -1){
-    fprintf(stderr, "Unable to create or open fd_slog file\n");
-    exit(6);
-  }
+  server->fd_sb = fopen(SERVER_BKS, "a+");
+  server->fd_sl = fopen(SERVER_LOG, "a+");
+
 }
 
 void writeToBook(server_t *server)
@@ -563,8 +568,8 @@ void writeToBook(server_t *server)
       if (nr == -1)
         badMessageAlloc();
 
-      write(server->fd_sbook, seat, nr);
-      write(server->fd_sbook, "\n", 1);
+      fwrite(seat, nr, 1, server->fd_sb);
+      fwrite("\n", 1, 1, server->fd_sb);
     }
   }
   free(seat);
@@ -572,10 +577,10 @@ void writeToBook(server_t *server)
 
 void closeLogs(server_t *server)
 {
-  write(server->fd_slog, "SERVER CLOSED", 13);
+  fwrite("SERVER CLOSED", 13, 1,server->fd_sl);
   writeToBook(server);
-  close(server->fd_sbook);
-  close(server->fd_slog);
+  fclose(server->fd_sb);
+  fclose(server->fd_sl);
 }
 
 void logReservedSeats(thread_t * thread){
@@ -596,7 +601,9 @@ void logReservedSeats(thread_t * thread){
     if (i == -1)
       badMessageAlloc();
 
-    write(thread->fd_slog,final_msg,i);
+    //TODO
+    //write(thread->fd_slog,final_msg,i);
+    fwrite(final_msg, i, 1, thread->fd_sl);
     free(seat);
     free(final_msg);
   }
@@ -634,7 +641,9 @@ void writeLog(thread_t * thread)
   if (i == -1)
     badMessageAlloc();
 
-  write(thread->fd_slog, final_msg,i);
+  //TODO
+  //write(thread->fd_slog, final_msg,i);
+  fwrite(final_msg,i,1,thread->fd_sl);
   free(idThread);
   free(idClient);
   free(numSeats);
@@ -655,7 +664,9 @@ void writeLog(thread_t * thread)
     if (i == -1)
       badMessageAlloc();
 
-    write(thread->fd_slog,final_msg,i);
+    //TODO
+    //write(thread->fd_slog,final_msg,i);
+    fwrite(final_msg, i, 1, thread->fd_sl);
     free(seat);
     free(final_msg);
   }
@@ -686,7 +697,9 @@ void writeLog(thread_t * thread)
     break;
   }
 
-  write(thread->fd_slog," -",2);
+  //TODO
+  //write(thread->fd_slog," -",2);
+  fwrite(" -", 2, 1, thread->fd_sl);
    if (reason != NULL)
   {
     i= asprintf(&final_msg," %s", reason);
@@ -694,11 +707,15 @@ void writeLog(thread_t * thread)
     if (i == -1)
       badMessageAlloc();
 
-    write(thread->fd_slog, final_msg, i);
+    //TODO
+    //write(thread->fd_slog, final_msg, i);
+    fwrite(final_msg, i, 1, thread->fd_sl);
     free(final_msg);
   } else logReservedSeats(thread);
 
-  write(thread->fd_slog,"\n",1);
+  //TODO
+  //write(thread->fd_slog,"\n",1);
+  fwrite("\n", 1, 1, thread->fd_sl);
 }
 
 int main(int argc, char *argv[])
