@@ -28,7 +28,12 @@ void badMessageAlloc()
 
 void sigalarm_handler(int signo)
 {
-  printf("hello\n");
+  if (!receivedMessage)
+  {
+    writeTimeOutMessage(client);
+    free_client(client);
+    exit(1);
+  }
 }
 
 client_t *new_client()
@@ -55,6 +60,15 @@ void createRequest(client_t *client, int time_out, int num_wanted_seats, int num
   req->pid = (int)client->pid;
   memcpy(req->pref_seat_list, pref_seat_list, MAX_CLI_SEATS);
   memcpy(req->answer_fifo_name, client->answer_fifo_name, MAX_ANS_FIFO);
+
+  client->fd_log = open(CLIENT_LOG, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
+  client->fd_book = open(CLIENT_BKS, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
+
+  if (client->fd_log == -1 || client->fd_book == -1)
+  {
+    fprintf(stderr, "Unable to create or open clog/cbook file\n");
+    exit(6);
+  }
 }
 
 void openRequestFifo(client_t *client)
@@ -160,21 +174,14 @@ void free_client(client_t *client)
   {
     perror("Error");
   }
+  close(client->fd_book);
+  close(client->fd_log);
   free(client->answer);
   free(client->answer_fifo_name);
 }
 
 void writeLog(client_t *client)
 {
-  int fd = open(CLIENT_LOG, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
-  int fd_book = open(CLIENT_BKS, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
-
-  if (fd == -1)
-  {
-    fprintf(stderr, "Unable to create or open clog file\n");
-    exit(6);
-  }
-
   char *pid_msg = NULL;
 
   char *pid_fmt = "%." QUOTE(WIDTH_PID) "d";
@@ -185,15 +192,14 @@ void writeLog(client_t *client)
     badMessageAlloc();
 
   if (client->answer->response_value == VALID_RESERVATION)
-    writeValidMessage(client, fd, pid_msg, fd_book);
+    writeValidMessage(client, pid_msg);
   else
-    writeInvalidMessage(client, fd, pid_msg);
+    writeInvalidMessage(client, pid_msg);
 
-  close(fd);
   free(pid_msg);
 }
 
-void writeInvalidMessage(client_t *client, int fd, char *pid_msg)
+void writeInvalidMessage(client_t *client, char *pid_msg)
 {
   int answer = client->answer->response_value;
 
@@ -231,12 +237,37 @@ void writeInvalidMessage(client_t *client, int fd, char *pid_msg)
     if (i == -1)
       badMessageAlloc();
 
-    write(fd, final_msg, i);
+    write(client->fd_log, final_msg, i);
     free(final_msg);
   }
 }
 
-void writeValidMessage(client_t *client, int fd, char *pid_msg,int fd_book)
+void writeTimeOutMessage(client_t *client)
+{
+
+  char *out = OUT;
+
+  char *pid_msg = NULL;
+
+  char *pid_fmt = "%." QUOTE(WIDTH_PID) "d";
+
+  int i = asprintf(&pid_msg, pid_fmt, client->pid);
+
+  if (i == -1)
+    badMessageAlloc();
+
+  char *final_msg = NULL;
+
+  i = asprintf(&final_msg, "%s %s\n", pid_msg, out);
+
+  if (i == -1)
+    badMessageAlloc();
+
+  write(client->fd_log, final_msg, i);
+  free(final_msg);
+}
+
+void writeValidMessage(client_t *client, char *pid_msg)
 {
   char *id = NULL;
   char *seat = NULL;
@@ -244,28 +275,26 @@ void writeValidMessage(client_t *client, int fd, char *pid_msg,int fd_book)
   int j = 0;
   int i = 0;
 
-  char *seat_fmt =NULL;
-  char *id_fmt =NULL;
+  char *seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+  char *id_fmt = "%." QUOTE(WIDTH_XX) "d.%." QUOTE(WIDTH_NN) "d";
   for (; j < client->answer->num_reserved_seats; j++)
   {
-    id_fmt = "%." QUOTE(WIDTH_XX) "d.%." QUOTE(WIDTH_NN) "d";
     i = asprintf(&id, id_fmt, (j + 1), client->answer->num_reserved_seats);
     if (i == -1)
       badMessageAlloc();
 
-    seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
     i = asprintf(&seat, seat_fmt, client->answer->reserved_seat_list[j]);
     if (i == -1)
       badMessageAlloc();
 
-    write(fd_book, seat, i);  
-    write(fd_book, "\n", 1);
+    write(client->fd_book, seat, i);
+    write(client->fd_book, "\n", 1);
 
     i = asprintf(&final_msg, "%s %s %s\n", pid_msg, id, seat);
     if (i == -1)
       badMessageAlloc();
 
-    write(fd, final_msg, i);
+    write(client->fd_log, final_msg, i);
     free(id);
     free(seat);
     free(final_msg);
@@ -293,9 +322,10 @@ int main(int argc, char *argv[])
 
   pch = strtok(pref_list, " ");
 
-  if(pch==NULL){
-      fprintf(stderr, "Error on preffered seat list\n");
-      exit(1);
+  if (pch == NULL)
+  {
+    fprintf(stderr, "Error on preffered seat list\n");
+    exit(1);
   }
 
   while (pch != NULL)
