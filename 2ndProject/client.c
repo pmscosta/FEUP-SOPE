@@ -12,27 +12,33 @@
 
 bool receivedMessage = false;
 
-
-
 void sigalarm_clean(client_t *data)
 {
-    static client_t *sClient;
-    if (data) {
-        sClient = data;
-    } else {
-        free_client(sClient);
-    }
+  static client_t *sClient;
+  if (data)
+  {
+    sClient = data;
+  }
+  else
+  {
+    writeTimeOutMessage(sClient);
+    free_client(sClient);
+  }
 }
 
 void sigalarm_handler(int signo)
 {
-  fprintf(stderr, "Received alarm\n");
-  sigalarm_clean(NULL);
-  fprintf(stderr, "Exiting...\n");
-  exit(1);
+  if (!receivedMessage)
+  {
+    fprintf(stderr, "Received alarm\n");
+    sigalarm_clean(NULL);
+    fprintf(stderr, "Exiting...\n");
+    exit(1);
+  }
 }
 
-void sigalarm_install(){
+void sigalarm_install()
+{
   struct sigaction sa;
 
   sa.sa_handler = sigalarm_handler;
@@ -292,7 +298,7 @@ void writeValidMessage(client_t *client, char *pid_msg)
 
   char *seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
   char *id_fmt = "%." QUOTE(WIDTH_XX) "d.%." QUOTE(WIDTH_NN) "d";
-  
+
   for (; j < client->answer->num_reserved_seats; j++)
   {
     i = asprintf(&id, id_fmt, (j + 1), client->answer->num_reserved_seats);
@@ -317,8 +323,9 @@ void writeValidMessage(client_t *client, char *pid_msg)
   }
 }
 
-int string_to_array(char * pref_list, int ** pref_seat_list){
-  
+int string_to_array(char *pref_list, int **pref_seat_list)
+{
+
   char *pch;
   int *new_pos;
   int pref_number = 0;
@@ -368,10 +375,8 @@ int main(int argc, char *argv[])
   int *pref_seat_list = NULL;
   int pref_number = string_to_array(argv[3], &pref_seat_list);
 
+  client_t *client = new_client();
 
-
-  client_t * client = new_client();
-  
   sigalarm_install();
   sigalarm_clean(client);
 
@@ -381,7 +386,7 @@ int main(int argc, char *argv[])
   printf("Sending request ...\n");
   sendRequest(client);
   //-----starting timer-----
-  ualarm(time_out*1000, 0);
+  ualarm(time_out * 1000, 0);
   //------------------------
   printf("Close request ...\n");
   close(client->fdRequest);
