@@ -596,85 +596,63 @@ void closeLogs(server_t *server)
   close(server->fd_slog);
 }
 
-void logReservedSeats(thread_t *thread)
+void writeLog(thread_t * thread)
 {
-  char *seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
-  char *final_msg = NULL;
-  char *seat = NULL;
 
-  int i = 0;
-
-  for (int j = 0; j < thread->answer->num_reserved_seats; j++)
-  {
-    i = asprintf(&seat, seat_fmt, thread->answer->reserved_seat_list[j]);
-    if (i == -1)
-      badMessageAlloc();
-
-    i = asprintf(&final_msg, " %s", seat);
-    if (i == -1)
-      badMessageAlloc();
-
-    write(thread->fd_slog, final_msg, i);
-    free(seat);
-    free(final_msg);
-  }
-}
-
-void writeLog(thread_t *thread)
-{
   //ID-Thread
-  char *idThread = NULL;
-  char *idThread_fmt = "%." QUOTE(WIDTH_TICKET_OFFICES) "d";
+  char * idThread=NULL;
+  char * idThread_fmt = "%." QUOTE(WIDTH_TICKET_OFFICES) "d";
   int i = asprintf(&idThread, idThread_fmt, thread->ticket_office_num);
 
-  if (i == -1)
+  if(i== -1)
     badMessageAlloc();
-
+  
   //ID-Client
-  char *idClient = NULL;
-  char *idClient_fmt = "%." QUOTE(WIDTH_PID) "d";
+  char * idClient =NULL;
+  char * idClient_fmt = "%." QUOTE(WIDTH_PID) "d";
   i = asprintf(&idClient, idClient_fmt, thread->request->pid);
 
-  if (i == -1)
+  if(i== -1)
     badMessageAlloc();
-
-  //Number of wanted seats
-  char *numSeats = NULL;
-  char *numSeats_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+  
+  //Number of wanted seats 
+  char * numSeats =NULL;
+  char * numSeats_fmt = "%." QUOTE(WIDTH_SEAT) "d";
   i = asprintf(&numSeats, numSeats_fmt, thread->request->num_wanted_seats);
 
+  if(i== -1)
+    badMessageAlloc(); 
+
+  char *msg_p1 = NULL;
+  i = asprintf(&msg_p1, "%s-%s-%s:",idThread , idClient, numSeats);
   if (i == -1)
     badMessageAlloc();
 
-  char *final_msg = NULL;
-  i = asprintf(&final_msg, "%s-%s-%s:", idThread, idClient, numSeats);
-  if (i == -1)
-    badMessageAlloc();
-
-  write(thread->fd_slog, final_msg, i);
   free(idThread);
   free(idClient);
   free(numSeats);
-  free(final_msg);
 
-  char *seat = NULL;
-  char *seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+  char *msg_p2 = NULL;
+  char * seat=NULL;
+  char * seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+
   for (int j = 0; j < thread->request->num_pref_seats; j++)
   {
-    if (thread->request->pref_seat_list[j] < 1 || thread->request->pref_seat_list[j] > g_num_room_seats)
-      continue;
+    if(thread->request->pref_seat_list[j] <1 || thread->request->pref_seat_list[j]>g_num_room_seats) continue;
 
     i = asprintf(&seat, seat_fmt, thread->request->pref_seat_list[j]);
     if (i == -1)
       badMessageAlloc();
-
-    i = asprintf(&final_msg, " %s", seat);
+    if(j == 0){
+    i = asprintf(&msg_p2, " %s",seat);
+    }
+    else{
+      i = asprintf(&msg_p2, "%s %s",msg_p2, seat);
+    }
     if (i == -1)
       badMessageAlloc();
 
-    write(thread->fd_slog, final_msg, i);
     free(seat);
-    free(final_msg);
   }
 
   char *reason = NULL;
@@ -702,23 +680,45 @@ void writeLog(thread_t *thread)
   default:
     break;
   }
-
-  write(thread->fd_slog, " -", 2);
+  
+  char *msg_p3 = NULL;
   if (reason != NULL)
   {
-    i = asprintf(&final_msg, " %s", reason);
+    i= asprintf(&msg_p3," %s", reason);
 
     if (i == -1)
       badMessageAlloc();
 
-    write(thread->fd_slog, final_msg, i);
-    free(final_msg);
-  }
-  else
-    logReservedSeats(thread);
+  } 
+  else 
+  {
+    for (int j = 0; j < thread->answer->num_reserved_seats; j++)
+    {
+      i = asprintf(&seat, seat_fmt, thread->answer->reserved_seat_list[j]);
+      if (i == -1)
+        badMessageAlloc();
 
-  write(thread->fd_slog, "\n", 1);
+      if(j == 0){
+        i = asprintf(&msg_p3, " %s",seat);
+      }
+      else{
+        i = asprintf(&msg_p3, "%s %s",msg_p3, seat);
+      }
+      if (i == -1)
+        badMessageAlloc();
+
+      free(seat);
+    }
+  }
+
+  char * final_msg = NULL;
+  i = asprintf(&final_msg, "%s %s -%s\n",msg_p1, msg_p2, msg_p3);
+  if (i == -1)
+    badMessageAlloc();
+  
+  write(thread->fd_slog,final_msg, strlen(final_msg));
 }
+
 
 int main(int argc, char *argv[])
 {
