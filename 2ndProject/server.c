@@ -36,9 +36,7 @@ void sigalarm_clean(server_t *data)
 
 void sigalarm_handler(int signo)
 {
-  fprintf(stderr, "Received alarm\n");
   sigalarm_clean(NULL);
-  fprintf(stderr, "Exiting...\n");
   exit(1);
 }
 
@@ -70,30 +68,19 @@ void *thr_run(void *thr)
 
   while (1)
   {
-    printf("reading request..\n");
-
     readRequestThread(thread);
-
-    printf("read request\n");
 
     validateRequestThread(thread);
 
     if (thread->answer->response_value != 0)
     {
-
-      printf("-------f------>invalid answer, return code = %d\n", thread->answer->response_value);
       sendFailedAnswer(thread);
       writeLog(thread);
       resetThread(thread);
-
-      //TODO continue or break?
       continue;
     }
-    printf("processing request\n");
     processRequest(thread);
-    fprintf(stderr, "Sending answer ...\n");
     sendAnswer(thread);
-    displayAnswer(thread->answer);
     writeLog(thread);
     resetThread(thread);
   }
@@ -140,7 +127,7 @@ void free_server(server_t *server)
 
   if (unlink(REQ_FIFO) == -1)
   {
-    perror("Error");
+    perror("Error unlinking REQ_FIFO");
   }
 }
 
@@ -180,9 +167,7 @@ void readRequestServer(server_t *server)
 
   while (1)
   {
-    printf("Locking server\n");
     pthread_mutex_lock(&unit_buffer_mut);
-    fprintf(stderr, "Lock in Server\n");
 
     while (unit_buffer_full == 1)
     {
@@ -198,16 +183,12 @@ void readRequestServer(server_t *server)
       }
       else
       {
-        displayRequest(request_buffer);
-
         unit_buffer_full = 1;
         pthread_cond_signal(&server_cond);
-        fprintf(stderr, "Send Condition Server\n");
       }
     }
 
     pthread_mutex_unlock(&unit_buffer_mut);
-    printf("Unlock Server\n");
   }
 }
 
@@ -274,7 +255,6 @@ int openAnswerFifo(thread_t *thread)
 
   if (fd_ans == -1)
   {
-    fprintf(stderr, "Unable to open answer fifo\n");
     return -1;
   }
   thread->fdAnswer = fd_ans;
@@ -285,16 +265,12 @@ int openAnswerFifo(thread_t *thread)
 void readRequestThread(thread_t *thread)
 {
 
-  fprintf(stderr, "Locking Thread\n");
   pthread_mutex_lock(&unit_buffer_mut);
-  printf("Locked in thread\n");
 
   while (unit_buffer_full == 0)
   {
-    fprintf(stderr, "Wait Condition Server\n");
     pthread_cond_wait(&server_cond, &unit_buffer_mut);
   }
-  printf("Critical\n");
 
   (*thread->request) = request_buffer;
 
@@ -302,7 +278,6 @@ void readRequestThread(thread_t *thread)
 
   pthread_cond_signal(&thread_cond);
   pthread_mutex_unlock(&unit_buffer_mut);
-  printf("Unlocked in thread\n");
 }
 
 int validParameters(thread_t *thread)
@@ -351,7 +326,6 @@ void validateRequestThread(thread_t *thread)
   //Valid preffered seats
   else if (thread->request->num_pref_seats + 1 < thread->request->num_wanted_seats || thread->request->num_pref_seats + 1 > MAX_CLI_SEATS)
   {
-    printf("Wanted: %d\n Pref: %d\n", thread->request->num_wanted_seats, thread->request->num_pref_seats);
     thread->answer->response_value = INVALID_PREF_NUMBER;
   }
 
@@ -364,7 +338,6 @@ void validateRequestThread(thread_t *thread)
     {
       if (thread->request->pref_seat_list[i] < 1 || thread->request->pref_seat_list[i] > g_num_room_seats)
       {
-        printf("Id:%d \n Max:%d\n", thread->request->pref_seat_list[i], g_num_room_seats);
         thread->answer->response_value = INVALID_SEATS_ID;
         return;
       }
@@ -444,11 +417,9 @@ int processRequest(thread_t *thread)
 
     pthread_mutex_lock(&(thread->seats[seatNum].mutex));
 
-    printf("Trying to reserve seat: %d\n", seatNum);
 
     if (isSeatFree(thread->seats, seatNum))
     {
-      printf("seat is free %d\n", seatNum);
       bookSeat(thread->seats, seatNum, id);
       thread->answer->reserved_seat_list[numberOfSeatsReserved] = seatNum + 1;
       numberOfSeatsReserved++;
@@ -461,7 +432,6 @@ int processRequest(thread_t *thread)
     if (numberOfSeatsReserved == thread->request->num_wanted_seats)
     {
       thread->answer->response_value = VALID_RESERVATION;
-      printf("-------------->reserved all seats\n");
       thread->answer->num_reserved_seats = numberOfSeatsReserved;
       numberOfSeatsReserved = 0;
       pthread_mutex_unlock(&(thread->seats[seatNum].mutex));
@@ -482,9 +452,6 @@ int processRequest(thread_t *thread)
 
 void sendAnswer(thread_t *thread)
 {
-
-  printf("Opening answer fifo ...\n");
-
   //if it can't open the answer fifo, ignores it and continues
   //can happen when the client reaches it's timeout and exits
   if (openAnswerFifo(thread) == -1)
@@ -510,7 +477,7 @@ void sendFailedAnswer(thread_t *thread)
 
   if (write(thread->fdAnswer, thread->answer, sizeof(answer_t)) == -1)
   {
-    printf("error writing answer\n");
+    fprintf(stderr, "error writing answer\n");
     exit(4);
   }
   close(thread->fdAnswer);
@@ -536,12 +503,12 @@ void logOpenClose(int fd_slog, int ticket_office_num, bool toOpen)
     badMessageAlloc();
 
   if (toOpen)
-    nr = asprintf(&finalMessage, "%s-OPEN", openMessage);
+    nr = asprintf(&finalMessage, "%s-OPEN\n", openMessage);
   else
-    nr = asprintf(&finalMessage, "%s-CLOSED", openMessage);
+    nr = asprintf(&finalMessage, "%s-CLOSED\n", openMessage);
+
 
   write(fd_slog, finalMessage, nr);
-  write(fd_slog, "\n", 1);
 
   free(openMessage);
   free(finalMessage);

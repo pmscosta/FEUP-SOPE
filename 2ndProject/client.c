@@ -30,9 +30,7 @@ void sigalarm_handler(int signo)
 {
   if (!receivedMessage)
   {
-    fprintf(stderr, "Received alarm\n");
     sigalarm_clean(NULL);
-    fprintf(stderr, "Exiting...\n");
     exit(1);
   }
 }
@@ -192,7 +190,7 @@ void free_client(client_t *client)
   close(client->fdAnswer);
   if (unlink(client->answer_fifo_name) == -1)
   {
-    perror("Error");
+    perror("Error unlinking answer_fifo_name");
   }
   close(client->fd_book);
   close(client->fd_log);
@@ -382,21 +380,16 @@ int main(int argc, char *argv[])
   createAnswerFifo(client);
   createRequest(client, num_wanted_seats, pref_number, pref_seat_list);
   openRequestFifo(client);
-  printf("Sending request ...\n");
   sendRequest(client);
+
   //-----starting timer-----
   ualarm(time_out * 1000, 0);
   //------------------------
-  printf("Close request ...\n");
+
   close(client->fdRequest);
-  printf("Opening answer fifo ...\n");
   openAnswerFifo(client);
-  printf("Reading answer from fifo ...\n");
   readAnswer(client);
-  printf("Read answer from fifo ...\n");
-  displayAnswer(client->answer);
   writeLog(client);
-  printf("Exit...\n");
   free_client(client);
 
   return 0;
