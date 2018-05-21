@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <string.h>
 #include <time.h>
+#include <errno.h>
 #include "client.h"
 
 bool receivedMessage = false;
@@ -76,7 +77,7 @@ void createRequest(client_t *client, int num_wanted_seats, int num_pref_seats, i
   req->num_wanted_seats = num_wanted_seats;
   req->num_pref_seats = num_pref_seats;
   req->pid = (int)client->pid;
-  memcpy(req->pref_seat_list, pref_seat_list, MAX_CLI_SEATS);
+  memcpy(req->pref_seat_list, pref_seat_list, sizeof(int) * num_pref_seats);
   memcpy(req->answer_fifo_name, client->answer_fifo_name, MAX_ANS_FIFO);
 
   client->fd_log = open(CLIENT_LOG, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
@@ -112,10 +113,23 @@ void createAnswerFifo(client_t *client)
     exit(3);
   }
 
-  if (mkfifo(name, 0755) == -1)
+  int i = mkfifo(name, S_IRUSR | S_IWUSR);
+
+  if (i == -1)
   {
-    fprintf(stderr, "Failed to create answer fifo\n");
-    exit(4);
+
+    if (errno == EEXIST)
+    {
+
+      unlink(name);
+      mkfifo(name, S_IRUSR | S_IWUSR);
+    }
+    else
+    {
+
+      fprintf(stderr, "Failed to create answer fifo\n");
+      exit(4);
+    }
   }
 
   client->answer_fifo_name = name;
@@ -371,6 +385,9 @@ int main(int argc, char *argv[])
   int num_wanted_seats = atoi(argv[2]);
   int *pref_seat_list = NULL;
   int pref_number = string_to_array(argv[3], &pref_seat_list);
+
+  if (pref_number > MAX_CLI_SEATS)
+    exit(1);
 
   client_t *client = new_client();
 

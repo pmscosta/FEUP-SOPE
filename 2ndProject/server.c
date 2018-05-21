@@ -9,6 +9,7 @@
 #include <string.h>
 #include <signal.h>
 #include <time.h>
+#include <errno.h>
 #include "server.h"
 
 pthread_mutex_t unit_buffer_mut = PTHREAD_MUTEX_INITIALIZER;
@@ -121,6 +122,7 @@ server_t *new_server(int num_room_seats, int num_ticket_offices, int open_time)
 
 void free_server(server_t *server)
 {
+
   free(server->ticket_offices);
   free(server->room_seats);
   close(server->fdRequest);
@@ -133,10 +135,22 @@ void free_server(server_t *server)
 
 void createRequestFifo(server_t *server)
 {
-  if (mkfifo(REQ_FIFO, 0755) == -1)
+
+  int i = mkfifo(REQ_FIFO, S_IRUSR | S_IWUSR);
+
+  if (i == -1)
   {
-    fprintf(stderr, "Unable to open fifo req\n");
-    exit(1);
+
+    if (errno == EEXIST)
+    {
+      unlink(REQ_FIFO);
+      mkfifo(REQ_FIFO, S_IRUSR | S_IWUSR);
+    }
+    else
+    {
+      fprintf(stderr, "Unable to open fifo req\n");
+      exit(1);
+    }
   }
 }
 
@@ -324,7 +338,7 @@ void validateRequestThread(thread_t *thread)
     thread->answer->response_value = INVALID_NUM_SEATS;
 
   //Valid preffered seats
-  else if (thread->request->num_pref_seats + 1 < thread->request->num_wanted_seats || thread->request->num_pref_seats + 1 > MAX_CLI_SEATS)
+  else if (thread->request->num_pref_seats < thread->request->num_wanted_seats || thread->request->num_pref_seats > MAX_CLI_SEATS)
   {
     thread->answer->response_value = INVALID_PREF_NUMBER;
   }
@@ -417,7 +431,6 @@ int processRequest(thread_t *thread)
 
     pthread_mutex_lock(&(thread->seats[seatNum].mutex));
 
-
     if (isSeatFree(thread->seats, seatNum))
     {
       bookSeat(thread->seats, seatNum, id);
@@ -507,7 +520,6 @@ void logOpenClose(int fd_slog, int ticket_office_num, bool toOpen)
   else
     nr = asprintf(&finalMessage, "%s-CLOSED\n", openMessage);
 
-
   write(fd_slog, finalMessage, nr);
 
   free(openMessage);
@@ -534,7 +546,7 @@ void openLogs(server_t *server)
 
 void writeToBook(server_t *server)
 {
-  char *seat;
+  char *seat = NULL;
 
   char *seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
 
@@ -563,35 +575,35 @@ void closeLogs(server_t *server)
   close(server->fd_slog);
 }
 
-void writeLog(thread_t * thread)
+void writeLog(thread_t *thread)
 {
 
   //ID-Thread
-  char * idThread=NULL;
-  char * idThread_fmt = "%." QUOTE(WIDTH_TICKET_OFFICES) "d";
+  char *idThread = NULL;
+  char *idThread_fmt = "%." QUOTE(WIDTH_TICKET_OFFICES) "d";
   int i = asprintf(&idThread, idThread_fmt, thread->ticket_office_num);
 
-  if(i== -1)
+  if (i == -1)
     badMessageAlloc();
-  
+
   //ID-Client
-  char * idClient =NULL;
-  char * idClient_fmt = "%." QUOTE(WIDTH_PID) "d";
+  char *idClient = NULL;
+  char *idClient_fmt = "%." QUOTE(WIDTH_PID) "d";
   i = asprintf(&idClient, idClient_fmt, thread->request->pid);
 
-  if(i== -1)
+  if (i == -1)
     badMessageAlloc();
-  
-  //Number of wanted seats 
-  char * numSeats =NULL;
-  char * numSeats_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+
+  //Number of wanted seats
+  char *numSeats = NULL;
+  char *numSeats_fmt = "%." QUOTE(WIDTH_SEAT) "d";
   i = asprintf(&numSeats, numSeats_fmt, thread->request->num_wanted_seats);
 
-  if(i== -1)
-    badMessageAlloc(); 
+  if (i == -1)
+    badMessageAlloc();
 
   char *msg_p1 = NULL;
-  i = asprintf(&msg_p1, "%s-%s-%s:",idThread , idClient, numSeats);
+  i = asprintf(&msg_p1, "%s-%s-%s:", idThread, idClient, numSeats);
   if (i == -1)
     badMessageAlloc();
 
@@ -600,21 +612,24 @@ void writeLog(thread_t * thread)
   free(numSeats);
 
   char *msg_p2 = NULL;
-  char * seat=NULL;
-  char * seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
+  char *seat = NULL;
+  char *seat_fmt = "%." QUOTE(WIDTH_SEAT) "d";
 
   for (int j = 0; j < thread->request->num_pref_seats; j++)
   {
-    if(thread->request->pref_seat_list[j] <1 || thread->request->pref_seat_list[j]>g_num_room_seats) continue;
+    if (thread->request->pref_seat_list[j] < 1 || thread->request->pref_seat_list[j] > g_num_room_seats)
+      continue;
 
     i = asprintf(&seat, seat_fmt, thread->request->pref_seat_list[j]);
     if (i == -1)
       badMessageAlloc();
-    if(j == 0){
-    i = asprintf(&msg_p2, " %s",seat);
+    if (j == 0)
+    {
+      i = asprintf(&msg_p2, " %s", seat);
     }
-    else{
-      i = asprintf(&msg_p2, "%s %s",msg_p2, seat);
+    else
+    {
+      i = asprintf(&msg_p2, "%s %s", msg_p2, seat);
     }
     if (i == -1)
       badMessageAlloc();
@@ -647,17 +662,16 @@ void writeLog(thread_t * thread)
   default:
     break;
   }
-  
+
   char *msg_p3 = NULL;
   if (reason != NULL)
   {
-    i= asprintf(&msg_p3," %s", reason);
+    i = asprintf(&msg_p3, " %s", reason);
 
     if (i == -1)
       badMessageAlloc();
-
-  } 
-  else 
+  }
+  else
   {
     for (int j = 0; j < thread->answer->num_reserved_seats; j++)
     {
@@ -665,11 +679,13 @@ void writeLog(thread_t * thread)
       if (i == -1)
         badMessageAlloc();
 
-      if(j == 0){
-        i = asprintf(&msg_p3, " %s",seat);
+      if (j == 0)
+      {
+        i = asprintf(&msg_p3, " %s", seat);
       }
-      else{
-        i = asprintf(&msg_p3, "%s %s",msg_p3, seat);
+      else
+      {
+        i = asprintf(&msg_p3, "%s %s", msg_p3, seat);
       }
       if (i == -1)
         badMessageAlloc();
@@ -678,14 +694,13 @@ void writeLog(thread_t * thread)
     }
   }
 
-  char * final_msg = NULL;
-  i = asprintf(&final_msg, "%s %s -%s\n",msg_p1, msg_p2, msg_p3);
+  char *final_msg = NULL;
+  i = asprintf(&final_msg, "%s %s -%s\n", msg_p1, msg_p2, msg_p3);
   if (i == -1)
     badMessageAlloc();
-  
-  write(thread->fd_slog,final_msg, strlen(final_msg));
-}
 
+  write(thread->fd_slog, final_msg, strlen(final_msg));
+}
 
 int main(int argc, char *argv[])
 {
